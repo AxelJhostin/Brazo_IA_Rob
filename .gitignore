@@ -1,0 +1,13 @@
+# Entorno Virtual de Python
+# Esto le dice a Git que ignore la carpeta venv y su contenido.
+venv/
+*.venv
+
+# Archivos de cache de Python
+# Ignora las carpetas de cache que Python crea automáticamente.
+__pycache__/
+*.pyc
+
+# Archivos de configuración del editor
+# Es una buena práctica ignorar la configuración personal del editor.
+.vscode/

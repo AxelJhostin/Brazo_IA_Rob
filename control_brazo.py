@@ -1,7 +1,7 @@
 # ----------------------------------------------------
 # PROYECTO: Control de Brazo Robótico con Visión
 # ARCHIVO: control_brazo.py
-# FASE 6: Suavizado de movimiento para un control más fluido
+# FASE 7: Lógica de rotación de muñeca intuitiva
 # ----------------------------------------------------
 
 import cv2
@@ -38,10 +38,7 @@ def calcular_angulo(a, b, c):
 cap = cv2.VideoCapture(0)
 
 # --- VARIABLES PARA EL FILTRO DE SUAVIZADO ---
-# Guardaremos el último valor suavizado para promediarlo con el nuevo.
-# Empezamos en 90 (el centro del servo).
 angulo_rotacion_suavizado = 90.0 
-# Factor de suavizado. Un valor más alto = más suave pero más lento. (Rango 0.0 a 1.0)
 smoothing_factor = 0.8 
 
 # Bucle principal
@@ -76,7 +73,6 @@ while cap.isOpened():
             # --- 4. Detección de la Mano y Rotación ---
             results_hands = hands.process(image_rgb)
             estado_mano = "No Detectada"
-            # Mantenemos el angulo_rotacion_actual sin suavizado para el cálculo
             angulo_rotacion_actual = angulo_rotacion_suavizado 
 
             if results_hands.multi_hand_landmarks:
@@ -92,31 +88,36 @@ while cap.isOpened():
                     base_mano = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
                     distancia = math.hypot(punta_indice.x - punta_pulgar.x, punta_indice.y - punta_pulgar.y)
                     distancia_referencia = math.hypot(punta_indice.x - base_mano.x, punta_indice.y - base_mano.y)
-                    if distancia < distancia_referencia * 0.3:
+                    if distancia < distancia_referencia * 0.4: # Umbral ajustado ligeramente
                         estado_mano = "CERRADA"
                     else:
                         estado_mano = "ABIERTA"
 
-                    # Lógica para rotación de muñeca (sin cambios)
-                    p5 = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
-                    p17 = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
-                    rotacion_rad = math.atan2(p17.y - p5.y, p17.x - p5.x)
-                    rotacion_deg = math.degrees(rotacion_rad)
-                    angulo_rotacion_actual = int(np.interp(rotacion_deg, [-110, 110], [0, 180]))
+                    # --- NUEVA LÓGICA DE ROTACIÓN DE MUÑECA INTUITIVA ---
+                    # Usamos la diferencia en X entre la base del dedo índice y la base del meñique
+                    # para determinar si la palma o el dorso están al frente.
+                    p5_x = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].x
+                    p17_x = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP].x
+                    
+                    # El valor será positivo si la palma está al frente (mano derecha)
+                    # y negativo si el dorso está al frente.
+                    rotacion_valor = p5_x - p17_x
+                    
+                    # Mapeamos este valor a un rango de 0-180.
+                    # El rango de entrada [-0.15, 0.15] se puede ajustar para cambiar la sensibilidad.
+                    # Un rango más grande hará que necesites girar menos la mano.
+                    angulo_rotacion_actual = np.interp(rotacion_valor, [-0.15, 0.15], [180, 0])
                     angulo_rotacion_actual = max(0, min(180, angulo_rotacion_actual))
 
             # --- APLICAR FILTRO DE SUAVIZADO ---
-            # El nuevo ángulo suavizado es una mezcla del valor anterior y el valor actual detectado.
             angulo_rotacion_suavizado = (angulo_rotacion_suavizado * smoothing_factor) + (angulo_rotacion_actual * (1 - smoothing_factor))
 
             # --- 5. Visualización en Pantalla ---
             cv2.putText(frame, f"Hombro: {int(angulo_hombro)}", tuple(np.multiply(hombro, [1,1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
             cv2.putText(frame, f"Codo: {int(angulo_codo)}", tuple(np.multiply(codo, [1,1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
             cv2.putText(frame, f"Mano: {estado_mano}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-            # Mostramos el valor suavizado
             cv2.putText(frame, f"Rotacion: {int(angulo_rotacion_suavizado)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
             
-            # Imprimir todo en la terminal (con el valor suavizado)
             print(f"\rHombro: {int(angulo_hombro)} | Codo: {int(angulo_codo)} | Mano: {estado_mano} | Rotacion: {int(angulo_rotacion_suavizado)}      ", end="")
 
         except:

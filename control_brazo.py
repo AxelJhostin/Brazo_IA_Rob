@@ -1,7 +1,7 @@
 # ----------------------------------------------------
 # PROYECTO: Control de Brazo Robótico con Visión
 # ARCHIVO: control_brazo.py
-# FASE 7: Lógica de rotación de muñeca intuitiva
+# FASE 8: Lógica de mano abierta/cerrada robusta
 # ----------------------------------------------------
 
 import cv2
@@ -25,9 +25,7 @@ hands = mp_hands.Hands(
 
 # --- 2. Función para Calcular Ángulos (sin cambios) ---
 def calcular_angulo(a, b, c):
-    a = np.array(a)
-    b = np.array(b)
-    c = np.array(c)
+    a, b, c = np.array(a), np.array(b), np.array(c)
     radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
     angle = np.abs(radians * 180.0 / np.pi)
     if angle > 180.0:
@@ -80,32 +78,28 @@ while cap.isOpened():
                     mp_drawing.draw_landmarks(
                         frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
                         mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2))
+                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
+                    )
 
-                    # Lógica para mano abierta/cerrada (sin cambios)
-                    punta_indice = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                    punta_pulgar = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
-                    base_mano = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
-                    distancia = math.hypot(punta_indice.x - punta_pulgar.x, punta_indice.y - punta_pulgar.y)
-                    distancia_referencia = math.hypot(punta_indice.x - base_mano.x, punta_indice.y - base_mano.y)
-                    if distancia < distancia_referencia * 0.4: # Umbral ajustado ligeramente
+                    # --- NUEVA LÓGICA ROBUSTA PARA MANO ABIERTA/CERRADA ---
+                    # Comprobamos si las puntas de los dedos están por debajo de sus nudillos.
+                    # Esto es mucho más fiable que medir distancias.
+                    punta_indice_y = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y
+                    nudillo_indice_y = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP].y
+
+                    punta_medio_y = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y
+                    nudillo_medio_y = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP].y
+
+                    # Si las puntas están más abajo (mayor valor en Y), la mano está cerrada.
+                    if punta_indice_y > nudillo_indice_y and punta_medio_y > nudillo_medio_y:
                         estado_mano = "CERRADA"
                     else:
                         estado_mano = "ABIERTA"
 
-                    # --- NUEVA LÓGICA DE ROTACIÓN DE MUÑECA INTUITIVA ---
-                    # Usamos la diferencia en X entre la base del dedo índice y la base del meñique
-                    # para determinar si la palma o el dorso están al frente.
+                    # Lógica de rotación de muñeca intuitiva (sin cambios)
                     p5_x = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].x
                     p17_x = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP].x
-                    
-                    # El valor será positivo si la palma está al frente (mano derecha)
-                    # y negativo si el dorso está al frente.
                     rotacion_valor = p5_x - p17_x
-                    
-                    # Mapeamos este valor a un rango de 0-180.
-                    # El rango de entrada [-0.15, 0.15] se puede ajustar para cambiar la sensibilidad.
-                    # Un rango más grande hará que necesites girar menos la mano.
                     angulo_rotacion_actual = np.interp(rotacion_valor, [-0.15, 0.15], [180, 0])
                     angulo_rotacion_actual = max(0, min(180, angulo_rotacion_actual))
 

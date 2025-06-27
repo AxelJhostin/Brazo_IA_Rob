@@ -1,7 +1,7 @@
 # ----------------------------------------------------
 # PROYECTO: Control de Brazo Robótico con Visión
 # ARCHIVO: control_brazo.py
-# FASE 8: Lógica de mano abierta/cerrada robusta
+# FASE 10: Lógica final y definitiva para mano abierta/cerrada
 # ----------------------------------------------------
 
 import cv2
@@ -21,11 +21,14 @@ pose = mp_pose.Pose(
 hands = mp_hands.Hands(
     static_image_mode=False,
     max_num_hands=1,
-    min_detection_confidence=0.5)
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5) # << Añadido para mayor estabilidad
 
-# --- 2. Función para Calcular Ángulos (sin cambios) ---
+# --- 2. Función para Calcular Ángulos (reutilizable) ---
 def calcular_angulo(a, b, c):
-    a, b, c = np.array(a), np.array(b), np.array(c)
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
     radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
     angle = np.abs(radians * 180.0 / np.pi)
     if angle > 180.0:
@@ -78,23 +81,34 @@ while cap.isOpened():
                     mp_drawing.draw_landmarks(
                         frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
                         mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
-                    )
+                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2))
 
-                    # --- NUEVA LÓGICA ROBUSTA PARA MANO ABIERTA/CERRADA ---
-                    # Comprobamos si las puntas de los dedos están por debajo de sus nudillos.
-                    # Esto es mucho más fiable que medir distancias.
-                    punta_indice_y = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y
-                    nudillo_indice_y = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP].y
+                    # --- LÓGICA FINAL Y DEFINITIVA PARA MANO ABIERTA/CERRADA ---
+                    # Comprobaremos los ángulos de flexión de los 4 dedos.
+                    
+                    dedos_flexionados = []
+                    # Puntos y ángulos de los 4 dedos (Índice, Medio, Anular, Meñique)
+                    puntos_dedos = [
+                        (mp_hands.HandLandmark.INDEX_FINGER_MCP, mp_hands.HandLandmark.INDEX_FINGER_PIP, mp_hands.HandLandmark.INDEX_FINGER_TIP),
+                        (mp_hands.HandLandmark.MIDDLE_FINGER_MCP, mp_hands.HandLandmark.MIDDLE_FINGER_PIP, mp_hands.HandLandmark.MIDDLE_FINGER_TIP),
+                        (mp_hands.HandLandmark.RING_FINGER_MCP, mp_hands.HandLandmark.RING_FINGER_PIP, mp_hands.HandLandmark.RING_FINGER_TIP),
+                        (mp_hands.HandLandmark.PINKY_MCP, mp_hands.HandLandmark.PINKY_PIP, mp_hands.HandLandmark.PINKY_TIP)
+                    ]
 
-                    punta_medio_y = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y
-                    nudillo_medio_y = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP].y
+                    for mcp_lm, pip_lm, tip_lm in puntos_dedos:
+                        mcp = [hand_landmarks.landmark[mcp_lm].x, hand_landmarks.landmark[mcp_lm].y]
+                        pip = [hand_landmarks.landmark[pip_lm].x, hand_landmarks.landmark[pip_lm].y]
+                        tip = [hand_landmarks.landmark[tip_lm].x, hand_landmarks.landmark[tip_lm].y]
+                        
+                        angulo_flexion = calcular_angulo(mcp, pip, tip)
+                        dedos_flexionados.append(angulo_flexion < 130) # Umbral de flexión, puedes ajustar 130
 
-                    # Si las puntas están más abajo (mayor valor en Y), la mano está cerrada.
-                    if punta_indice_y > nudillo_indice_y and punta_medio_y > nudillo_medio_y:
+                    # Si al menos 3 de los 4 dedos están flexionados, la mano está cerrada.
+                    if sum(dedos_flexionados) >= 3:
                         estado_mano = "CERRADA"
                     else:
                         estado_mano = "ABIERTA"
+
 
                     # Lógica de rotación de muñeca intuitiva (sin cambios)
                     p5_x = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].x

@@ -1,26 +1,26 @@
 # ----------------------------------------------------
 # PROYECTO: Control de Brazo Robótico con Visión
 # ARCHIVO: control_brazo.py
-# FASE 4: Detección de mano abierta/cerrada
+# FASE 6: Suavizado de movimiento para un control más fluido
 # ----------------------------------------------------
 
 import cv2
 import mediapipe as mp
 import numpy as np
-import math # Importamos math para cálculos de distancia
+import math
 
 # --- 1. Inicialización de MediaPipe (Pose y Hands) ---
 mp_pose = mp.solutions.pose
-mp_hands = mp.solutions.hands # << NUEVO: Inicializamos el detector de manos
+mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
 pose = mp_pose.Pose(
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5)
 
-hands = mp_hands.Hands( # << NUEVO: Creamos el objeto de manos
+hands = mp_hands.Hands(
     static_image_mode=False,
-    max_num_hands=1, # Solo nos interesa una mano
+    max_num_hands=1,
     min_detection_confidence=0.5)
 
 # --- 2. Función para Calcular Ángulos (sin cambios) ---
@@ -36,6 +36,13 @@ def calcular_angulo(a, b, c):
 
 # Inicializar la captura de video
 cap = cv2.VideoCapture(0)
+
+# --- VARIABLES PARA EL FILTRO DE SUAVIZADO ---
+# Guardaremos el último valor suavizado para promediarlo con el nuevo.
+# Empezamos en 90 (el centro del servo).
+angulo_rotacion_suavizado = 90.0 
+# Factor de suavizado. Un valor más alto = más suave pero más lento. (Rango 0.0 a 1.0)
+smoothing_factor = 0.8 
 
 # Bucle principal
 while cap.isOpened():
@@ -58,57 +65,59 @@ while cap.isOpened():
             landmarks = results_pose.pose_landmarks.landmark
             h, w, _ = frame.shape
 
-            # Coordenadas del brazo
+            # Coordenadas y ángulos del brazo (sin cambios)
             hombro = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y * h]
             codo = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y * h]
             muneca = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y * h]
             cadera = [landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y * h]
-
-            # Cálculo de ángulos
             angulo_hombro = calcular_angulo(cadera, hombro, codo)
             angulo_codo = calcular_angulo(hombro, codo, muneca)
 
-            # Visualización de ángulos
-            cv2.putText(frame, f"Codo: {int(angulo_codo)}", tuple(np.multiply(codo, [1, 1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, f"Hombro: {int(angulo_hombro)}", tuple(np.multiply(hombro, [1, 1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-            
-            # --- 4. Detección de la Mano ---
-            # Procesamos la imagen con el detector de manos
+            # --- 4. Detección de la Mano y Rotación ---
             results_hands = hands.process(image_rgb)
             estado_mano = "No Detectada"
+            # Mantenemos el angulo_rotacion_actual sin suavizado para el cálculo
+            angulo_rotacion_actual = angulo_rotacion_suavizado 
 
             if results_hands.multi_hand_landmarks:
                 for hand_landmarks in results_hands.multi_hand_landmarks:
-                    # Dibujar la mano
                     mp_drawing.draw_landmarks(
                         frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
                         mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
-                    )
+                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2))
 
-                    # Calcular si la mano está abierta o cerrada
-                    # Usaremos la distancia vertical entre la punta del índice y la base del pulgar
+                    # Lógica para mano abierta/cerrada (sin cambios)
                     punta_indice = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
                     punta_pulgar = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
                     base_mano = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
-
-                    # Calculamos la distancia entre el pulgar y el índice
                     distancia = math.hypot(punta_indice.x - punta_pulgar.x, punta_indice.y - punta_pulgar.y)
-                    
-                    # Comparamos con la distancia entre la muñeca y la punta del índice para normalizar
                     distancia_referencia = math.hypot(punta_indice.x - base_mano.x, punta_indice.y - base_mano.y)
-                    
-                    # Si la distancia entre los dedos es pequeña, está cerrada.
-                    if distancia < distancia_referencia * 0.3: # El 0.3 es un umbral que puedes ajustar
+                    if distancia < distancia_referencia * 0.3:
                         estado_mano = "CERRADA"
                     else:
                         estado_mano = "ABIERTA"
 
-            # Mostramos el estado de la mano en la pantalla
+                    # Lógica para rotación de muñeca (sin cambios)
+                    p5 = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+                    p17 = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+                    rotacion_rad = math.atan2(p17.y - p5.y, p17.x - p5.x)
+                    rotacion_deg = math.degrees(rotacion_rad)
+                    angulo_rotacion_actual = int(np.interp(rotacion_deg, [-110, 110], [0, 180]))
+                    angulo_rotacion_actual = max(0, min(180, angulo_rotacion_actual))
+
+            # --- APLICAR FILTRO DE SUAVIZADO ---
+            # El nuevo ángulo suavizado es una mezcla del valor anterior y el valor actual detectado.
+            angulo_rotacion_suavizado = (angulo_rotacion_suavizado * smoothing_factor) + (angulo_rotacion_actual * (1 - smoothing_factor))
+
+            # --- 5. Visualización en Pantalla ---
+            cv2.putText(frame, f"Hombro: {int(angulo_hombro)}", tuple(np.multiply(hombro, [1,1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Codo: {int(angulo_codo)}", tuple(np.multiply(codo, [1,1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
             cv2.putText(frame, f"Mano: {estado_mano}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            # Mostramos el valor suavizado
+            cv2.putText(frame, f"Rotacion: {int(angulo_rotacion_suavizado)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
             
-            # Imprimir todo en la terminal
-            print(f"\rAngulo Hombro: {int(angulo_hombro)} | Angulo Codo: {int(angulo_codo)} | Mano: {estado_mano}      ", end="")
+            # Imprimir todo en la terminal (con el valor suavizado)
+            print(f"\rHombro: {int(angulo_hombro)} | Codo: {int(angulo_codo)} | Mano: {estado_mano} | Rotacion: {int(angulo_rotacion_suavizado)}      ", end="")
 
         except:
             pass
@@ -118,6 +127,6 @@ while cap.isOpened():
         break
 
 pose.close()
-hands.close() # << NUEVO: Cerramos el detector de manos
+hands.close()
 cap.release()
 cv2.destroyAllWindows()

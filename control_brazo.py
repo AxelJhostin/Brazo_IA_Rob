@@ -1,141 +1,138 @@
-# ----------------------------------------------------
-# PROYECTO: Control de Brazo Robótico con Visión
-# ARCHIVO: control_brazo.py
-# FASE 10: Lógica final y definitiva para mano abierta/cerrada
-# ----------------------------------------------------
+# -----------------------------------------------------------------
+# PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
+# VERSIÓN: Final Completa con Comunicación Serial
+# -----------------------------------------------------------------
 
 import cv2
 import mediapipe as mp
 import numpy as np
 import math
+import serial
+import time
 
-# --- 1. Inicialización de MediaPipe (Pose y Hands) ---
+# --- 1. CONFIGURACIÓN DE LA COMUNICACIÓN SERIAL ---
+try:
+    # Reemplaza 'COM4' por el puerto COM correcto de tu placa
+    arduino = serial.Serial('COM4', 9600, timeout=1)
+    time.sleep(2)
+    print("Conexión con Arduino establecida.")
+except serial.SerialException as e:
+    arduino = None
+    print(f"--- ADVERTENCIA: No se pudo conectar con Arduino: {e} ---")
+    print("--- El programa continuará en modo visual sin envío de datos. ---")
+
+# --- 2. INICIALIZACIÓN DE MEDIAPIPE ---
 mp_pose = mp.solutions.pose
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
-pose = mp_pose.Pose(
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5)
+pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-hands = mp_hands.Hands(
-    static_image_mode=False,
-    max_num_hands=1,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5) # << Añadido para mayor estabilidad
-
-# --- 2. Función para Calcular Ángulos (reutilizable) ---
+# --- 3. FUNCIONES Y VARIABLES DE CONTROL ---
 def calcular_angulo(a, b, c):
-    a = np.array(a)
-    b = np.array(b)
-    c = np.array(c)
+    a, b, c = np.array(a), np.array(b), np.array(c)
     radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
     angle = np.abs(radians * 180.0 / np.pi)
-    if angle > 180.0:
-        angle = 360 - angle
-    return angle
+    return 360 - angle if angle > 180.0 else angle
 
-# Inicializar la captura de video
+# Variables para suavizado y control de envío
+angulo_rotacion_suavizado = 90.0
+smoothing_factor = 0.8
+send_interval = 0.1
+last_send_time = time.time()
+
+# --- 4. BUCLE PRINCIPAL ---
 cap = cv2.VideoCapture(0)
-
-# --- VARIABLES PARA EL FILTRO DE SUAVIZADO ---
-angulo_rotacion_suavizado = 90.0 
-smoothing_factor = 0.8 
-
-# Bucle principal
 while cap.isOpened():
     ret, frame = cap.read()
-    if not ret:
-        continue
+    if not ret: continue
 
     frame = cv2.flip(frame, 1)
+    h, w, _ = frame.shape
     image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
     results_pose = pose.process(image_rgb)
+    results_hands = hands.process(image_rgb)
 
-    # --- 3. Procesamiento y Dibujo ---
+    # Valores por defecto
+    h1, h2, c, ma, mr, p = 90, 90, 90, 90, 90, 0
+    estado_mano_str = "ABIERTA"
+    angulo_rotacion_actual = angulo_rotacion_suavizado
+
     if results_pose.pose_landmarks:
-        mp_drawing.draw_landmarks(
-            frame, results_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-            mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2),
-            mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2))
-            
         try:
             landmarks = results_pose.pose_landmarks.landmark
-            h, w, _ = frame.shape
-
-            # Coordenadas y ángulos del brazo (sin cambios)
+            
+            # Coordenadas
             hombro = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y * h]
             codo = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y * h]
             muneca = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y * h]
             cadera = [landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x * w, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y * h]
-            angulo_hombro = calcular_angulo(cadera, hombro, codo)
-            angulo_codo = calcular_angulo(hombro, codo, muneca)
-
-            # --- 4. Detección de la Mano y Rotación ---
-            results_hands = hands.process(image_rgb)
-            estado_mano = "No Detectada"
-            angulo_rotacion_actual = angulo_rotacion_suavizado 
-
+            
+            # --- CÁLCULO DE ÁNGULOS ---
+            # Hombro Eje 1 (Base/Giro): Mapeo de la posición Y de la muñeca
+            h1 = np.interp(muneca[1], [h * 0.1, h * 0.9], [180, 0])
+            
+            # Hombro Eje 2 (Elevación)
+            h2 = calcular_angulo(cadera, hombro, codo)
+            
+            # Codo
+            c = calcular_angulo(hombro, codo, muneca)
+            
             if results_hands.multi_hand_landmarks:
                 for hand_landmarks in results_hands.multi_hand_landmarks:
-                    mp_drawing.draw_landmarks(
-                        frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
-                        mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2))
-
-                    # --- LÓGICA FINAL Y DEFINITIVA PARA MANO ABIERTA/CERRADA ---
-                    # Comprobaremos los ángulos de flexión de los 4 dedos.
                     
-                    dedos_flexionados = []
-                    # Puntos y ángulos de los 4 dedos (Índice, Medio, Anular, Meñique)
-                    puntos_dedos = [
-                        (mp_hands.HandLandmark.INDEX_FINGER_MCP, mp_hands.HandLandmark.INDEX_FINGER_PIP, mp_hands.HandLandmark.INDEX_FINGER_TIP),
-                        (mp_hands.HandLandmark.MIDDLE_FINGER_MCP, mp_hands.HandLandmark.MIDDLE_FINGER_PIP, mp_hands.HandLandmark.MIDDLE_FINGER_TIP),
-                        (mp_hands.HandLandmark.RING_FINGER_MCP, mp_hands.HandLandmark.RING_FINGER_PIP, mp_hands.HandLandmark.RING_FINGER_TIP),
-                        (mp_hands.HandLandmark.PINKY_MCP, mp_hands.HandLandmark.PINKY_PIP, mp_hands.HandLandmark.PINKY_TIP)
-                    ]
-
-                    for mcp_lm, pip_lm, tip_lm in puntos_dedos:
-                        mcp = [hand_landmarks.landmark[mcp_lm].x, hand_landmarks.landmark[mcp_lm].y]
-                        pip = [hand_landmarks.landmark[pip_lm].x, hand_landmarks.landmark[pip_lm].y]
-                        tip = [hand_landmarks.landmark[tip_lm].x, hand_landmarks.landmark[tip_lm].y]
-                        
-                        angulo_flexion = calcular_angulo(mcp, pip, tip)
-                        dedos_flexionados.append(angulo_flexion < 130) # Umbral de flexión, puedes ajustar 130
-
-                    # Si al menos 3 de los 4 dedos están flexionados, la mano está cerrada.
-                    if sum(dedos_flexionados) >= 3:
-                        estado_mano = "CERRADA"
-                    else:
-                        estado_mano = "ABIERTA"
-
-
-                    # Lógica de rotación de muñeca intuitiva (sin cambios)
+                    # Muñeca Adelante/Atrás (Pitch) - ¡NUEVO!
+                    base_mano = [hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].x * w, hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].y * h]
+                    ma = calcular_angulo(codo, muneca, base_mano)
+                    
+                    # Muñeca Lados (Roll)
                     p5_x = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].x
                     p17_x = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP].x
                     rotacion_valor = p5_x - p17_x
                     angulo_rotacion_actual = np.interp(rotacion_valor, [-0.15, 0.15], [180, 0])
-                    angulo_rotacion_actual = max(0, min(180, angulo_rotacion_actual))
 
-            # --- APLICAR FILTRO DE SUAVIZADO ---
-            angulo_rotacion_suavizado = (angulo_rotacion_suavizado * smoothing_factor) + (angulo_rotacion_actual * (1 - smoothing_factor))
+                    # Pinza (Mano Abierta/Cerrada)
+                    puntos_dedos = [(8, 6), (12, 10), (16, 14), (20, 18)]
+                    dedos_flexionados = sum(1 for p1, p2 in puntos_dedos if hand_landmarks.landmark[p1].y > hand_landmarks.landmark[p2].y)
+                    if dedos_flexionados >= 3:
+                        p = 1
+                        estado_mano_str = "CERRADA"
+                    else:
+                        p = 0
+                        estado_mano_str = "ABIERTA"
 
-            # --- 5. Visualización en Pantalla ---
-            cv2.putText(frame, f"Hombro: {int(angulo_hombro)}", tuple(np.multiply(hombro, [1,1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
-            cv2.putText(frame, f"Codo: {int(angulo_codo)}", tuple(np.multiply(codo, [1,1]).astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
-            cv2.putText(frame, f"Mano: {estado_mano}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-            cv2.putText(frame, f"Rotacion: {int(angulo_rotacion_suavizado)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-            
-            print(f"\rHombro: {int(angulo_hombro)} | Codo: {int(angulo_codo)} | Mano: {estado_mano} | Rotacion: {int(angulo_rotacion_suavizado)}      ", end="")
+            # Aplicar filtro de suavizado a la rotación
+            mr = (angulo_rotacion_suavizado * smoothing_factor) + (angulo_rotacion_actual * (1 - smoothing_factor))
+            angulo_rotacion_suavizado = mr
 
-        except:
+            # --- ENVIAR DATOS A ARDUINO ---
+            current_time = time.time()
+            if arduino and (current_time - last_send_time > send_interval):
+                mensaje = f"<{int(h1)},{int(h2)},{int(c)},{int(ma)},{int(mr)},{p}>\n"
+                arduino.write(mensaje.encode('utf-8'))
+                last_send_time = current_time
+
+            # --- VISUALIZACIÓN ---
+            mp_drawing.draw_landmarks(frame, results_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            if results_hands.multi_hand_landmarks:
+                for hand_landmarks in results_hands.multi_hand_landmarks:
+                    mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+            cv2.putText(frame, f"Mano: {estado_mano_str}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Rotacion: {int(mr)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Inclinacion: {int(ma)}", (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+
+        except Exception as e:
             pass
 
-    cv2.imshow('Control Brazo Robótico - [ESC para Salir]', frame)
-    if cv2.waitKey(5) & 0xFF == 27:
-        break
+    cv2.imshow('Control Brazo Robótico (6 Ejes) - [ESC para Salir]', frame)
+    if cv2.waitKey(5) & 0xFF == 27: break
 
-pose.close()
-hands.close()
+# --- LIMPIEZA FINAL ---
+print("\nCerrando programa...")
+if arduino:
+    arduino.close()
 cap.release()
 cv2.destroyAllWindows()

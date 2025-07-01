@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN:  Final con Control 1 a 1 y Resolución Ajustada
+# VERSIÓN:  Final con Control Intuitivo por Ejes X/Y
 # =================================================================
 
 # --- IMPORTACIÓN DE LIBRERÍAS ---
@@ -12,13 +12,32 @@ import serial
 import time
 from collections import deque
 
-# --- 1. PARÁMETROS DE CONTROL ---
-# Se han eliminado los parámetros de calibración para un control más directo.
+# --- 1. PARÁMETROS DE CALIBRACIÓN Y LÍMITES ---
+# RANGO DEL GIRO BASE (Eje 1) - Controlado por Eje X
+BASE_X_MIN_PORCENTAJE = 0.15 
+BASE_X_MAX_PORCENTAJE = 0.85
+
+# RANGO DE ELEVACIÓN DEL HOMBRO (Eje 2) - Controlado por Eje Y
+HOMBRO_Y_MIN_PORCENTAJE = 0.1
+HOMBRO_Y_MAX_PORCENTAJE = 0.9
+
+# RANGO DE ROTACIÓN DE MUÑECA (Roll / Eje 5)
+ROLL_INPUT_RANGE = 0.22       
+ROLL_OUTPUT_MIN_ANGLE = 40 # Límite mínimo para el servo de rotación
+ROLL_OUTPUT_MAX_ANGLE = 130 # Límite máximo para el servo de rotación
+
+# RANGO DE INCLINACIÓN DE MUÑECA (Pitch / Eje 4)
+PITCH_INPUT_MIN_ANGLE = 150
+PITCH_INPUT_MAX_ANGLE = 210
+
+# UMBRAL PARA MANO CERRADA
+FLEXION_ANGLE_THRESHOLD = 110
+
+# PARÁMETROS DE CONTROL
 SMOOTHING_FACTOR = 0.8
 SEND_INTERVAL = 0.1
 GESTURE_BUFFER_SIZE = 10 
 GESTURE_CONFIRMATION_THRESHOLD = 7 
-FLEXION_ANGLE_THRESHOLD = 110
 
 # --- 2. CLASE DE AYUDA PARA MEDIAPIPE ---
 class PoseDetector:
@@ -29,18 +48,12 @@ class PoseDetector:
         self.pose = self.mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
         self.hands = self.mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-    def find_pose(self, image):
-        return self.pose.process(image)
-
-    def find_hands(self, image):
-        return self.hands.process(image)
-
+    def find_pose(self, image): return self.pose.process(image)
+    def find_hands(self, image): return self.hands.process(image)
     def draw_all_landmarks(self, image, pose_results, hand_results):
-        if pose_results.pose_landmarks:
-            self.mp_drawing.draw_landmarks(image, pose_results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
+        if pose_results.pose_landmarks: self.mp_drawing.draw_landmarks(image, pose_results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
         if hand_results.multi_hand_landmarks:
-            for hand_landmarks in hand_results.multi_hand_landmarks:
-                self.mp_drawing.draw_landmarks(image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
+            for hand_lm in hand_results.multi_hand_landmarks: self.mp_drawing.draw_landmarks(image, hand_lm, self.mp_hands.HAND_CONNECTIONS)
 
 # --- 3. FUNCIONES DE CÁLCULO ---
 def calcular_angulo(a, b, c):
@@ -53,42 +66,38 @@ def calcular_angulos_brazo(landmarks, h, w):
     hombro = [landmarks[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].x * w, landmarks[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].y * h]
     codo = [landmarks[mp.solutions.pose.PoseLandmark.RIGHT_ELBOW.value].x * w, landmarks[mp.solutions.pose.PoseLandmark.RIGHT_ELBOW.value].y * h]
     muneca = [landmarks[mp.solutions.pose.PoseLandmark.RIGHT_WRIST.value].x * w, landmarks[mp.solutions.pose.PoseLandmark.RIGHT_WRIST.value].y * h]
-    cadera = [landmarks[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].x * w, landmarks[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].y * h]
     
-    # Base sigue siendo mapeada, ya que no hay un ángulo corporal directo para ella.
-    h1 = np.interp(muneca[0], [w * 0.15, w * 0.85], [180, 0])
-    h2 = calcular_angulo(cadera, hombro, codo)
+    # Eje 1 (Base): Mapeo de la posición X de la muñeca.
+    h1 = np.interp(muneca[0], [w * BASE_X_MIN_PORCENTAJE, w * BASE_X_MAX_PORCENTAJE], [180, 0])
+    # Eje 2 (Hombro): Mapeo de la posición Y de la muñeca.
+    h2 = np.interp(muneca[1], [h * HOMBRO_Y_MAX_PORCENTAJE, h * HOMBRO_Y_MIN_PORCENTAJE], [0, 180])
+    # Eje 3 (Codo): Cálculo de ángulo directo.
     c = calcular_angulo(hombro, codo, muneca)
     
     return {'base': h1, 'hombro': h2, 'codo': c}, codo, muneca
 
 def calcular_gestos_mano(hand_landmarks, codo, muneca):
-    # Inclinación (Pitch) - AHORA ES UN VALOR DIRECTO 1 a 1
-    base_mano_coords = [hand_landmarks.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_MCP].x, hand_landmarks.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_MCP].y]
-    ma = calcular_angulo(codo, muneca, base_mano_coords)
+    ma_raw = calcular_angulo(codo, muneca, [hand_landmarks.landmark[5].x, hand_landmarks.landmark[5].y])
+    ma = np.interp(ma_raw, [PITCH_INPUT_MIN_ANGLE, PITCH_INPUT_MAX_ANGLE], [180, 0])
 
-    # Rotación (Roll) - Sigue siendo mapeada por necesidad.
     p5_x = hand_landmarks.landmark[5].x
     p17_x = hand_landmarks.landmark[17].x
-    mr_raw = np.interp(p5_x - p17_x, [-0.22, 0.22], [180, 0])
+    mr_raw = np.interp(p5_x - p17_x, [-ROLL_INPUT_RANGE, ROLL_INPUT_RANGE], [180, 0])
+    mr_limitado = np.interp(mr_raw, [0, 180], [ROLL_OUTPUT_MIN_ANGLE, ROLL_OUTPUT_MAX_ANGLE])
 
-    # Pinza (Abierta/Cerrada)
     puntos_dedos = [(8, 6), (12, 10), (16, 14), (20, 18)]
     dedos_flexionados = sum(1 for p1, p2 in puntos_dedos if hand_landmarks.landmark[p1].y > hand_landmarks.landmark[p2].y)
     p = 1 if dedos_flexionados >= 3 else 0
     
-    return {'pitch': ma, 'roll_raw': mr_raw, 'pinza': p}
+    return {'pitch': ma, 'roll_raw': mr_limitado, 'pinza': p}
 
 def dibujar_panel_de_datos(panel, angulos_brazo, gestos_mano, roll_suavizado):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.9
-    color_texto = (255, 255, 255)
-    grosor = 2
+    font = cv2.FONT_HERSHEY_SIMPLEX; font_scale = 0.9; color_texto = (255, 255, 255); grosor = 2
     mano_str = "CERRADA" if gestos_mano['pinza'] == 1 else "ABIERTA"
     textos = {
-        "Base (Eje 1)": int(angulos_brazo['base']), "Hombro (Eje 2)": int(angulos_brazo['hombro']),
-        "Codo (Eje 3)": int(angulos_brazo['codo']), "Inclinacion (Eje 4)": int(gestos_mano['pitch']),
-        "Rotacion (Eje 5)": int(roll_suavizado), "Pinza (Eje 6)": mano_str
+        "Base (Giro)": int(angulos_brazo['base']), "Hombro (Elev.)": int(angulos_brazo['hombro']),
+        "Codo (Flex.)": int(angulos_brazo['codo']), "Muneca (Pitch)": int(gestos_mano['pitch']),
+        "Rotacion (Roll)": int(roll_suavizado), "Pinza": mano_str
     }
     cv2.putText(panel, "DATOS DEL ROBOT", (30, 40), font, 1.1, color_texto, grosor)
     cv2.line(panel, (20, 60), (380, 60), color_texto, 1)
@@ -109,14 +118,13 @@ def main():
 
     detector = PoseDetector()
     cap = cv2.VideoCapture(0)
-    # Se eliminó cap.set() para usar la resolución por defecto (más pequeña)
     
     last_send_time = time.time()
     angulo_rotacion_suavizado = 90.0
     gesture_buffer = deque(maxlen=GESTURE_BUFFER_SIZE)
     stable_pinza_state = 0
     
-    panel_width = 400
+    panel_width = 450
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -142,10 +150,8 @@ def main():
                     gestos_mano = calcular_gestos_mano(hand_lm, codo_rel, muneca_rel)
         
         gesture_buffer.append(gestos_mano['pinza'])
-        if sum(gesture_buffer) >= GESTURE_CONFIRMATION_THRESHOLD:
-            stable_pinza_state = 1
-        elif sum(gesture_buffer) <= (GESTURE_BUFFER_SIZE - GESTURE_CONFIRMATION_THRESHOLD):
-            stable_pinza_state = 0
+        if sum(gesture_buffer) >= GESTURE_CONFIRMATION_THRESHOLD: stable_pinza_state = 1
+        elif sum(gesture_buffer) <= (GESTURE_BUFFER_SIZE - GESTURE_CONFIRMATION_THRESHOLD): stable_pinza_state = 0
 
         roll_suavizado = (angulo_rotacion_suavizado * SMOOTHING_FACTOR) + (gestos_mano['roll_raw'] * (1 - SMOOTHING_FACTOR))
         angulo_rotacion_suavizado = roll_suavizado
@@ -162,12 +168,10 @@ def main():
         dibujar_panel_de_datos(lienzo[:, w:], angulos_brazo, gestos_mano, roll_suavizado)
         
         cv2.imshow('Control Brazo Robótico (6 Ejes)', lienzo)
-        if cv2.waitKey(5) & 0xFF == 27:
-            break
+        if cv2.waitKey(5) & 0xFF == 27: break
 
     print("\nCerrando programa...")
-    if arduino:
-        arduino.close()
+    if arduino: arduino.close()
     cap.release()
     cv2.destroyAllWindows()
 

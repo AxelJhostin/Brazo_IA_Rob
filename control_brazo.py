@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN:  Prueba Incremental - Corrección Final de Inclinación
+# VERSIÓN:  Prueba Incremental - TODOS LOS 6 EJES ACTIVADOS
 # =================================================================
 
 import cv2
@@ -9,14 +9,18 @@ import numpy as np
 import serial
 import time
 import math
+from collections import deque
 
 # --- PARÁMETROS ---
 BASE_CONTROL_RANGE_PX = 150 
 HOMBRO_CONTROL_RANGE_PX = 100
-# Define qué tan amplio debe ser tu movimiento de flexión/extensión.
-# Un valor más pequeño lo hará más sensible.
 PITCH_SENSITIVITY = 0.4 
+ROLL_INPUT_RANGE = 0.12       
+FLEXION_ANGLE_THRESHOLD = 110
+SMOOTHING_FACTOR = 0.8
 SEND_INTERVAL = 0.1
+GESTURE_BUFFER_SIZE = 10 
+GESTURE_CONFIRMATION_THRESHOLD = 7 
 
 # --- CLASE DE AYUDA PARA MEDIAPIPE ---
 class PoseDetector:
@@ -56,40 +60,51 @@ def calcular_angulos_brazo(landmarks, h, w):
     
     return {'base': h1, 'hombro': h2, 'codo': c}, codo, muneca
 
-# <<-- LÓGICA DE INCLINACIÓN COMPLETAMENTE NUEVA Y ROBUSTA -->>
-def calcular_inclinacion_muneca(hand_landmarks, codo_coords, muneca_coords):
-    # Vector del antebrazo (del codo a la muñeca)
+def calcular_gestos_muneca(hand_landmarks, codo_coords, muneca_coords):
+    # Inclinación (Pitch)
     vec_antebrazo = np.array(muneca_coords) - np.array(codo_coords)
-    
-    # Vector de la mano (de la muñeca a la base de los dedos)
     mcp_coords = [hand_landmarks.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_MCP].x, hand_landmarks.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_MCP].y]
-    vec_mano = np.array(mcp_coords) - np.array([muneca_coords[0] / w, muneca_coords[1] / h]) # Normalizar para comparar
-    
-    # Calcular el ángulo con signo entre los dos vectores
+    vec_mano = np.array(mcp_coords) - np.array([muneca_coords[0] / w, muneca_coords[1] / h])
     angle_rad = np.arctan2(vec_mano[1], vec_mano[0]) - np.arctan2(vec_antebrazo[1], vec_antebrazo[0])
     angle_deg = np.degrees(angle_rad)
-    
-    # Normalizar el ángulo para que 0 sea la mano recta
     if angle_deg > 180: angle_deg -= 360
     if angle_deg < -180: angle_deg += 360
+    ma = np.interp(angle_deg, [-90 * PITCH_SENSITIVITY, 90 * PITCH_SENSITIVITY], [180, 0])
+    ma = max(0, min(180, ma))
 
-    # Mapear el rango de movimiento de la muñeca (-45 a 45 grados) al rango del servo (0 a 180)
-    # Usamos PITCH_SENSITIVITY para ajustar qué tan amplio es el movimiento
-    angulo_final = np.interp(angle_deg, [-90 * PITCH_SENSITIVITY, 90 * PITCH_SENSITIVITY], [180, 0])
+    # Rotación (Roll)
+    p5_x = hand_landmarks.landmark[5].x
+    p17_x = hand_landmarks.landmark[17].x
+    mr_raw = np.interp(p5_x - p17_x, [-ROLL_INPUT_RANGE, ROLL_INPUT_RANGE], [180, 0])
     
-    # Asegurarse de que el valor esté siempre entre 0 y 180
-    angulo_final = max(0, min(180, angulo_final))
-    
-    return angulo_final
+    # Pinza (Abierta/Cerrada)
+    puntos_dedos = [
+        (mp.solutions.hands.HandLandmark.INDEX_FINGER_MCP, mp.solutions.hands.HandLandmark.INDEX_FINGER_PIP, mp.solutions.hands.HandLandmark.INDEX_FINGER_TIP),
+        (mp.solutions.hands.HandLandmark.MIDDLE_FINGER_MCP, mp.solutions.hands.HandLandmark.MIDDLE_FINGER_PIP, mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP),
+        (mp.solutions.hands.HandLandmark.RING_FINGER_MCP, mp.solutions.hands.HandLandmark.RING_FINGER_PIP, mp.solutions.hands.HandLandmark.RING_FINGER_TIP),
+        (mp.solutions.hands.HandLandmark.PINKY_MCP, mp.solutions.hands.HandLandmark.PINKY_PIP, mp.solutions.hands.HandLandmark.PINKY_TIP)
+    ]
+    dedos_flexionados = 0
+    for mcp_lm, pip_lm, tip_lm in puntos_dedos:
+        mcp = [hand_landmarks.landmark[mcp_lm].x, hand_landmarks.landmark[mcp_lm].y]
+        pip = [hand_landmarks.landmark[pip_lm].x, hand_landmarks.landmark[pip_lm].y]
+        tip = [hand_landmarks.landmark[tip_lm].x, hand_landmarks.landmark[tip_lm].y]
+        if calcular_angulo(mcp, pip, tip) < FLEXION_ANGLE_THRESHOLD:
+            dedos_flexionados += 1
+    p = 1 if dedos_flexionados >= 3 else 0
+
+    return {'pitch': ma, 'roll_raw': mr_raw, 'pinza_raw': p}
 
 # --- FUNCIÓN DE VISUALIZACIÓN ---
-def dibujar_panel_de_datos(panel, angulos_brazo, angulo_pitch):
+def dibujar_panel_de_datos(panel, angulos_brazo, gestos_mano, roll_suavizado, mano_str):
     font = cv2.FONT_HERSHEY_SIMPLEX; font_scale = 0.9; color_texto = (255, 255, 255); grosor = 2
     textos = {
         "Base (Giro)": int(angulos_brazo['base']),
         "Hombro (Elev.)": int(angulos_brazo['hombro']),
         "Codo (Flex.)": int(angulos_brazo['codo']),
-        "Muneca (Pitch)": int(angulo_pitch)
+        "Muneca (Pitch)": int(gestos_mano['pitch']),
+        "Rotacion (Roll)": int(roll_suavizado),
+        "Pinza": mano_str
     }
     cv2.putText(panel, "DATOS DEL ROBOT", (30, 40), font, 1.1, color_texto, grosor)
     cv2.line(panel, (20, 60), (380, 60), color_texto, 1)
@@ -112,8 +127,11 @@ def main():
     cap = cv2.VideoCapture(0)
     last_send_time = time.time()
     panel_width = 450
+    angulo_rotacion_suavizado = 90.0
+    gesture_buffer = deque(maxlen=GESTURE_BUFFER_SIZE)
+    stable_pinza_state = 0
     
-    global w, h # Hacemos w y h globales para que sean accesibles desde la función de cálculo
+    global w, h
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -128,26 +146,36 @@ def main():
         results_hands = detector.find_hands(image_rgb)
         
         angulos_brazo = {'base': 90, 'hombro': 90, 'codo': 90}
-        angulo_pitch = 90
+        gestos_mano = {'pitch': 90, 'roll_raw': 90, 'pinza_raw': 0}
 
         if results_pose.pose_landmarks:
             angulos_brazo, codo_coords, muneca_coords = calcular_angulos_brazo(results_pose.pose_landmarks.landmark, h, w)
             
             if results_hands.multi_hand_landmarks:
                 for hand_lm in results_hands.multi_hand_landmarks:
-                    angulo_pitch = calcular_inclinacion_muneca(hand_lm, codo_coords, muneca_coords)
+                    gestos_mano = calcular_gestos_muneca(hand_lm, codo_coords, muneca_coords)
+        
+        gesture_buffer.append(gestos_mano['pinza_raw'])
+        if sum(gesture_buffer) >= GESTURE_CONFIRMATION_THRESHOLD:
+            stable_pinza_state = 1
+        elif sum(gesture_buffer) <= (GESTURE_BUFFER_SIZE - GESTURE_CONFIRMATION_THRESHOLD):
+            stable_pinza_state = 0
 
+        roll_suavizado = (angulo_rotacion_suavizado * SMOOTHING_FACTOR) + (gestos_mano['roll_raw'] * (1 - SMOOTHING_FACTOR))
+        angulo_rotacion_suavizado = roll_suavizado
+        
         current_time = time.time()
         if arduino and (current_time - last_send_time > SEND_INTERVAL):
-            mensaje = f"<{int(angulos_brazo['base'])},{int(angulos_brazo['hombro'])},{int(angulos_brazo['codo'])},{int(angulo_pitch)}>\n"
+            mensaje = f"<{int(angulos_brazo['base'])},{int(angulos_brazo['hombro'])},{int(angulos_brazo['codo'])},{int(gestos_mano['pitch'])},{int(roll_suavizado)},{stable_pinza_state}>\n"
             arduino.write(mensaje.encode('utf-8'))
             last_send_time = current_time
 
         detector.draw_all_landmarks(frame, results_pose, results_hands)
         lienzo[0:h, 0:w] = frame
-        dibujar_panel_de_datos(lienzo[:, w:], angulos_brazo, angulo_pitch)
+        mano_str = "CERRADA" if stable_pinza_state == 1 else "ABIERTA"
+        dibujar_panel_de_datos(lienzo[:, w:], angulos_brazo, gestos_mano, roll_suavizado, mano_str)
         
-        cv2.imshow('Control Brazo Robótico - Prueba Ejes 1, 2, 3 y 4', lienzo)
+        cv2.imshow('Control Brazo Robótico - Prueba Ejes 1-6 (Final)', lienzo)
         if cv2.waitKey(5) & 0xFF == 27: break
 
     print("\nCerrando programa...")

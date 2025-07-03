@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN:  Prueba Incremental - TODOS LOS 6 EJES ACTIVADOS
+# VERSIÓN:  Final con Sensibilidad Aumentada
 # =================================================================
 
 import cv2
@@ -15,10 +15,11 @@ from collections import deque
 BASE_CONTROL_RANGE_PX = 150 
 HOMBRO_CONTROL_RANGE_PX = 100
 PITCH_SENSITIVITY = 0.4 
-ROLL_INPUT_RANGE = 0.12       
+# <<-- CORRECCIÓN: Se reduce el rango para hacer la rotación más sensible
+ROLL_INPUT_RANGE = 0.18       
 FLEXION_ANGLE_THRESHOLD = 110
 SMOOTHING_FACTOR = 0.8
-SEND_INTERVAL = 0.1
+SEND_INTERVAL = 0.05
 GESTURE_BUFFER_SIZE = 10 
 GESTURE_CONFIRMATION_THRESHOLD = 7 
 

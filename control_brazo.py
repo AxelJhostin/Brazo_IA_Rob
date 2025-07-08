@@ -17,8 +17,8 @@ import serial.tools.list_ports
 BASE_X_MIN_PORCENTAJE = 0.15
 BASE_X_MAX_PORCENTAJE = 0.85
 ROLL_INPUT_RANGE = 0.22
-ROLL_OUTPUT_MIN_ANGLE = 40
-ROLL_OUTPUT_MAX_ANGLE = 130
+ROLL_OUTPUT_MIN_ANGLE = 10  # Cambiado de 40 a 10 para mejor rango
+ROLL_OUTPUT_MAX_ANGLE = 180  # Cambiado de 130 a 180 para mejor rango
 PITCH_INPUT_MIN_ANGLE = 150
 PITCH_INPUT_MAX_ANGLE = 210
 GESTURE_BUFFER_SIZE = 10
@@ -28,13 +28,14 @@ BAUD_RATE = 9600
 CALIBRATION_TIME = 5  # Tiempo para calibración en segundos
 DISTANCE_THRESHOLD = 0.1  # Umbral del 10% para cambios significativos
 DISTANCE_RANGE = 0.3  # Rango de distancias para mapeo a 0-180 grados
+PROXIMITY_FILTER_FACTOR = 0.2  # Factor de filtrado para valores de proximidad
 
 # --- SISTEMA DE SEGURIDAD ---
 ANGULOS_SEGUROS = {
     'hombro': (30, 160),
     'codo': (20, 170),
     'pitch': (0, 180),
-    'roll': (40, 130),
+    'roll': (10, 180),  # Ajustado al nuevo rango
     'proximidad': (0, 180)  # Nuevo rango para el valor de proximidad
 }
 
@@ -54,8 +55,10 @@ MODO_CONFIGURACION = 1
 modo_actual = MODO_NORMAL
 calibracion_completada = False
 distancia_referencia = 0
+distancia_rotacion_referencia = 0  # Nueva referencia para rotación
 tiempo_inicio_calibracion = 0
 distancia_actual = ""
+valor_proximidad_filtrado = 90  # Valor filtrado para suavizar movimientos
 
 # --- CLASE POSE DETECTOR CON VISUALIZACIÓN MEJORADA ---
 class PoseDetector:
@@ -173,21 +176,22 @@ def detectar_pinza(hand_landmarks):
     )
     return 1 if flexionados >= 4 else 0
 
-def calcular_distancia_mano(hand_landmarks):
-    """Calcula la distancia entre landmarks 5 y 17 para estimar proximidad"""
-    # Puntos para cálculo de distancia: base del índice (5) y base del meñique (17)
-    punto5 = hand_landmarks.landmark[5]
-    punto17 = hand_landmarks.landmark[17]
+def calcular_distancia_mano(hand_landmarks, punto1=5, punto2=17):
+    """Calcula la distancia entre dos landmarks de la mano"""
+    # Puntos para cálculo de distancia (por defecto 5 y 17)
+    punto_a = hand_landmarks.landmark[punto1]
+    punto_b = hand_landmarks.landmark[punto2]
     
     # Distancia euclidiana entre puntos
     distancia = math.sqrt(
-        (punto5.x - punto17.x)**2 + 
-        (punto5.y - punto17.y)**2
+        (punto_a.x - punto_b.x)**2 + 
+        (punto_a.y - punto_b.y)**2
     )
     return distancia
 
-def calcular_gestos_mano(hand_landmarks, codo, muneca):
+def calcular_gestos_mano(hand_landmarks, codo, muneca, distancia_rotacion_ref):
     try:
+        # Cálculo del ángulo de pitch (muñeca)
         ma_raw = math.degrees(math.atan2(hand_landmarks.landmark[5].y - muneca[1], 
                                          hand_landmarks.landmark[5].x - muneca[0]) -
                           math.atan2(codo[1] - muneca[1], codo[0] - muneca[0]))
@@ -196,10 +200,24 @@ def calcular_gestos_mano(hand_landmarks, codo, muneca):
         ma = 90
 
     try:
-        p5_x = hand_landmarks.landmark[5].x
-        p17_x = hand_landmarks.landmark[17].x
-        mr_raw = np.interp(p5_x - p17_x, [-ROLL_INPUT_RANGE, ROLL_INPUT_RANGE], [180, 0])
-        mr_limitado = np.interp(mr_raw, [0, 180], [ROLL_OUTPUT_MIN_ANGLE, ROLL_OUTPUT_MAX_ANGLE])
+        # Cálculo del ángulo de roll (rotación) mejorado
+        # Primero calculamos la distancia entre punto 5 y 0 (referencia de rotación)
+        distancia_actual_rotacion = calcular_distancia_mano(hand_landmarks, 5, 0)
+        
+        # Si tenemos una referencia de rotación, usamos esa para calcular el roll
+        if distancia_rotacion_ref > 0:
+            # Calculamos la variación respecto a la referencia
+            variacion_rotacion = distancia_actual_rotacion - distancia_rotacion_ref
+            # Mapeamos la variación al rango de roll (10-180)
+            mr_limitado = np.interp(variacion_rotacion, 
+                                  [-ROLL_INPUT_RANGE, ROLL_INPUT_RANGE], 
+                                  [10, 180])
+        else:
+            # Si no hay referencia, usamos el método anterior
+            p5_x = hand_landmarks.landmark[5].x
+            p17_x = hand_landmarks.landmark[17].x
+            mr_raw = np.interp(p5_x - p17_x, [-ROLL_INPUT_RANGE, ROLL_INPUT_RANGE], [180, 0])
+            mr_limitado = np.interp(mr_raw, [0, 180], [ROLL_OUTPUT_MIN_ANGLE, ROLL_OUTPUT_MAX_ANGLE])
     except:
         mr_limitado = 90
 
@@ -221,9 +239,11 @@ def aplicar_limites_seguros(angulos):
             angulos_limitados[eje] = valor
     return angulos_limitados
 
-# --- CALCULAR VALOR DE PROXIMIDAD ---
+# --- CALCULAR VALOR DE PROXIMIDAD CON FILTRADO ---
 def calcular_proximidad(distancia_actual, distancia_referencia):
-    """Calcula el valor de proximidad (0-180) basado en la distancia"""
+    """Calcula el valor de proximidad (0-180) basado en la distancia con filtrado"""
+    global valor_proximidad_filtrado
+    
     if not calibracion_completada or distancia_referencia == 0:
         return 90
     
@@ -236,11 +256,16 @@ def calcular_proximidad(distancia_actual, distancia_referencia):
     
     # Mapear a rango 0-180
     if distancia_actual <= dist_min:
-        return 0
+        valor_raw = 0
     elif distancia_actual >= dist_max:
-        return 180
+        valor_raw = 180
     else:
-        return np.interp(distancia_actual, [dist_min, dist_max], [0, 180])
+        valor_raw = np.interp(distancia_actual, [dist_min, dist_max], [0, 180])
+    
+    # Aplicar filtro de suavizado
+    valor_proximidad_filtrado = (PROXIMITY_FILTER_FACTOR * valor_raw) + ((1 - PROXIMITY_FILTER_FACTOR) * valor_proximidad_filtrado)
+    
+    return int(valor_proximidad_filtrado)
 
 # --- PANEL SUPERIOR CON LOGO ---
 def crear_panel_superior(ancho_total, alto=90, logo_img=None):
@@ -385,9 +410,9 @@ def en_zona_calibracion(wrist_y, alto):
     end_y = start_y + zona_alto
     return start_y <= wrist_y <= end_y
 
-# --- MAIN CON SISTEMA DE PROXIMIDAD ---
+# --- MAIN CON SISTEMA DE PROXIMIDAD MEJORADO ---
 def main():
-    global modo_actual, calibracion_completada, distancia_referencia, tiempo_inicio_calibracion, distancia_actual
+    global modo_actual, calibracion_completada, distancia_referencia, tiempo_inicio_calibracion, distancia_actual, valor_proximidad_filtrado, distancia_rotacion_referencia
     
     # Configuración de ventana redimensionable
     cv2.namedWindow("Control de Brazo Robotico", cv2.WINDOW_NORMAL)
@@ -468,6 +493,7 @@ def main():
         codo, muneca = [0, 0], [0, 0]
         wrist_y = 0
         distancia_mano_actual = 0
+        distancia_rotacion_actual = 0
 
         # Variables para detección de mano
         mano_detectada = False
@@ -482,10 +508,14 @@ def main():
                     try:
                         codo_rel = [codo[0] / w, codo[1] / h]
                         muneca_rel = [muneca[0] / w, muneca[1] / h]
-                        gestos = calcular_gestos_mano(hand, codo_rel, muneca_rel)
                         
                         # Calcular distancia de la mano (entre landmarks 5 y 17)
                         distancia_mano_actual = calcular_distancia_mano(hand)
+                        # Calcular distancia para rotación (entre 5 y 0)
+                        distancia_rotacion_actual = calcular_distancia_mano(hand, 5, 0)
+                        
+                        # Calcular gestos con la referencia de rotación
+                        gestos = calcular_gestos_mano(hand, codo_rel, muneca_rel, distancia_rotacion_referencia)
                         mano_detectada = True
                     except:
                         gestos = {'pitch': 90, 'roll_raw': 90, 'pinza': 0}
@@ -510,8 +540,10 @@ def main():
                 if tiempo_transcurrido >= CALIBRATION_TIME:
                     if mano_detectada:
                         distancia_referencia = distancia_mano_actual
+                        distancia_rotacion_referencia = distancia_rotacion_actual  # Guardar referencia de rotación
                         calibracion_completada = True
                         print(f"Calibracion completada. Distancia referencia: {distancia_referencia:.4f}")
+                        print(f"Referencia de rotacion: {distancia_rotacion_referencia:.4f}")
                     modo_actual = MODO_NORMAL
                     tiempo_inicio_calibracion = 0
             else:

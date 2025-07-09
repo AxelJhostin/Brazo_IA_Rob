@@ -274,10 +274,10 @@ def crear_panel_superior(ancho_total, alto=90, logo_img=None):
     
     # Fuente mejorada
     font = cv2.FONT_HERSHEY_DUPLEX
-    grosor = 1
+    grosor = 2  # Aumentado para mejor visibilidad
     escala = 1.2
     
-    texto = "Proyecto de brazo robotico"
+    texto = "PROYECTO BRAZO ROBOTICO"  # Todo en mayúsculas
     texto_size = cv2.getTextSize(texto, font, escala, grosor)[0]
     texto_x = (ancho_total - texto_size[0]) // 2
     texto_y = 60
@@ -313,15 +313,17 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
     # Fuentes mejoradas
     font_titulo = cv2.FONT_HERSHEY_DUPLEX
     font_modo = cv2.FONT_HERSHEY_DUPLEX
-    font_texto = cv2.FONT_HERSHEY_COMPLEX
+    font_texto = cv2.FONT_HERSHEY_SIMPLEX  # Fuente más legible
+    font_valores = cv2.FONT_HERSHEY_SIMPLEX  # Fuente para valores
     
-    grosor_normal = 1
-    grosor_modo = 2
+    grosor_normal = 2  # Bold para texto
+    grosor_modo = 2    # Bold para modo
+    grosor_valores = 2  # Ahora también en bold
     
     # Estado de conexión
     estado_serial = "CONECTADO" if conexion_serial else "DESCONECTADO"
     color_serial = (0, 180, 0) if conexion_serial else (0, 0, 180)
-    cv2.putText(panel, f"Serial: {estado_serial}", (30, 50), font_texto, 1.0, color_serial, grosor_normal)
+    cv2.putText(panel, f"SERIAL: {estado_serial}", (30, 50), font_texto, 0.9, color_serial, grosor_normal)
     
     # Indicador de modo
     if modo_configuracion:
@@ -335,13 +337,13 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
         if tiempo_restante > 0:
             # Texto de calibración con fondo claro
             cv2.rectangle(panel, (20, 140), (ancho-20, 180), (240, 240, 200), -1)
-            cv2.putText(panel, f"Calibrando: {tiempo_restante:.1f}s", 
-                       (ancho//2 - 150, 170), font_texto, 1.0, (0, 0, 0), grosor_normal)
+            cv2.putText(panel, f"CALIBRANDO: {tiempo_restante:.1f}s", 
+                       (ancho//2 - 150, 170), font_texto, 0.9, (0, 0, 0), grosor_normal)
         else:
             # Instrucciones con fondo claro
             cv2.rectangle(panel, (20, 140), (ancho-20, 180), (240, 240, 200), -1)
-            cv2.putText(panel, "Coloque brazo en zona amarilla", 
-                       (ancho//2 - 220, 170), font_texto, 0.9, (0, 0, 0), grosor_normal)
+            cv2.putText(panel, "COLOCAR BRAZO EN ZONA AMARILLA", 
+                       (ancho//2 - 250, 170), font_texto, 0.8, (0, 0, 0), grosor_normal)
         
         cv2.line(panel, (25, 190), (ancho - 25, 190), (200, 200, 200), 2)
         y_start = 220
@@ -353,19 +355,19 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
         cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
         y_start = 160
     
-    # Título de sección para articulaciones
+    # Título de sección para articulaciones con más espacio
     cv2.putText(panel, "ESTADO DE ARTICULACIONES", 
-               (ancho//2 - 200, y_start+20), font_texto, 0.9, (60, 60, 60), grosor_normal)
-    y_start += 40
+               (ancho//2 - 200, y_start+40), font_texto, 0.9, (60, 60, 60), grosor_normal)
+    y_start += 80  # Aumentado el espacio a 80 píxeles (antes era 60)
     
     # Articulaciones con diseño mejorado
     articulaciones = [
-        ('proximidad', 'Proximidad'),
-        ('hombro', 'Hombro'),
-        ('codo', 'Codo'),
-        ('pitch', 'Muneca'),
-        ('roll', 'Rotacion'),
-        ('mano', 'Mano')
+        ('proximidad', 'PROXIMIDAD'),
+        ('hombro', 'HOMBRO'),
+        ('codo', 'CODO'),
+        ('pitch', 'MUÑECA'),
+        ('roll', 'ROTACION'),
+        ('mano', 'MANO')
     ]
     
     for i, (key, nombre) in enumerate(articulaciones):
@@ -379,9 +381,10 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
         else:
             valor = int(angulos[key]) if key != 'mano' else ("CERRADA" if mano_estable else "ABIERTA")
         
-        # Texto grande y de alta calidad
-        cv2.putText(panel, nombre, (80, y_pos + 10), font_texto, 1.0, (0, 0, 0), grosor_normal)
-        cv2.putText(panel, f"{valor}", (280, y_pos + 10), font_texto, 1.0, (0, 0, 0), grosor_normal)
+        # Texto en bold
+        cv2.putText(panel, nombre, (80, y_pos + 10), font_texto, 0.9, (0, 0, 0), grosor_normal)
+        # Valores también en bold
+        cv2.putText(panel, f"{valor}", (280, y_pos + 10), font_valores, 0.9, (0, 0, 0), grosor_valores)
     
     return panel
 

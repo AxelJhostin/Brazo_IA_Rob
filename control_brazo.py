@@ -23,7 +23,7 @@ PITCH_INPUT_MIN_ANGLE = 150
 PITCH_INPUT_MAX_ANGLE = 210
 GESTURE_BUFFER_SIZE = 10
 GESTURE_CONFIRMATION_THRESHOLD = 7
-SERIAL_PORT = 'COM3'
+SERIAL_PORT = 'COM4'
 BAUD_RATE = 9600
 CALIBRATION_TIME = 5  # Tiempo para calibración en segundos
 DISTANCE_THRESHOLD = 0.1  # Umbral del 10% para cambios significativos
@@ -365,7 +365,7 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
         ('proximidad', 'PROXIMIDAD'),
         ('hombro', 'HOMBRO'),
         ('codo', 'CODO'),
-        ('pitch', 'MUÑECA'),
+        ('pitch', 'MUNECA'),
         ('roll', 'ROTACION'),
         ('mano', 'MANO')
     ]

@@ -1,7 +1,8 @@
 # =================================================================
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
-# configuración para el proyecto del brazo robótico.
+#              configuración para el proyecto del brazo robótico.
+# VERSIÓN: 1.2 - Posturas Predefinidas (26/07/2024)
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL ---
@@ -19,9 +20,8 @@ GESTURE_CONFIRMATION_THRESHOLD = 7
 CALIBRATION_TIME = 5
 
 # --- PARÁMETROS DE LÓGICA DEL ROBOT (CÁLCULOS) ---
-# NUEVO: Factor de suavizado para los ángulos principales. Más bajo = más suave.
-ANGLE_SMOOTHING_FACTOR = 0.3 
-PROXIMITY_FILTER_FACTOR = 0.2 # Mantenemos uno separado para la base por si se quiere diferente
+ANGLE_SMOOTHING_FACTOR = 0.1 # Más bajo para un movimiento suave a la postura
+PROXIMITY_FILTER_FACTOR = 0.2 
 
 ROLL_INPUT_RANGE = 0.22
 ROLL_OUTPUT_MIN_ANGLE = 10
@@ -39,6 +39,21 @@ ANGULOS_SEGUROS = {
     'proximidad': (0, 180)
 }
 
+# --- POSTURAS PREDEFINIDAS ---
+# Define aquí las posturas que quieras. La clave es el nombre de la postura.
+POSTURAS_PREDEFINIDAS = {
+    'saludo': {
+        'proximidad': 90,
+        'hombro': 120,
+        'codo': 90,
+        'pitch': 90,
+        'roll': 90,
+        'mano': 0  # 0 para abierta, 1 para cerrada
+    }
+    # Puedes añadir más posturas aquí, ej: 'descanso': {...}
+}
+
+
 # --- PARÁMETROS DE LA INTERFAZ GRÁFICA ---
 COLORES = {
     'proximidad': (0, 0, 255),
@@ -52,3 +67,4 @@ COLORES = {
 # --- ESTADOS DEL PROGRAMA (Para claridad) ---
 MODO_NORMAL = 0
 MODO_CONFIGURACION = 1
+MODO_POSTURA = 2 # Nuevo modo

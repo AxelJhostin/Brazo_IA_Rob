@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN: Con Suavizado de Ángulos
+# VERSIÓN: 1.2 - Posturas Predefinidas (26/07/2024)
 # =================================================================
 
 import cv2
@@ -11,7 +11,6 @@ import os
 import serial
 import serial.tools.list_ports
 
-# --- IMPORTACIONES DE MÓDULOS LOCALES ---
 import config
 import robot_logic
 from ui_components import crear_panel_superior, crear_panel_lateral, dibujar_zona_calibracion
@@ -19,17 +18,16 @@ from ui_components import crear_panel_superior, crear_panel_lateral, dibujar_zon
 def main():
     # --- INICIALIZACIÓN ---
     modo_actual = config.MODO_NORMAL
+    postura_activa = None # Para saber qué postura ejecutar
     calibracion_completada = False
     distancia_referencia = 0
     distancia_rotacion_referencia = 0
     tiempo_inicio_calibracion = 0
     
-    # Instanciamos el procesador de ángulos que mantendrá el estado del suavizado
     angle_processor = robot_logic.AngleProcessor()
 
     cv2.namedWindow("Control de Brazo Robotico", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Control de Brazo Robotico", 1600, 900)
-
     logo_img = cv2.imread("logo_puce.png") if os.path.exists("logo_puce.png") else None
     
     try:
@@ -59,14 +57,11 @@ def main():
         h, w, _ = frame.shape
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # 1. PROCESAR LÓGICA DEL ROBOT (Obtener datos en bruto)
         results_pose = detector.find_pose(image_rgb)
         results_hands = detector.find_hands(image_rgb)
 
-        ang_brazo, codo, muneca = {'hombro': 90, 'codo': 90}, [0, 0], [0, 0]
-        gestos = {'pitch': 90, 'roll_raw': 90, 'pinza': 0}
-        distancia_mano_actual = 0
-        mano_detectada = False
+        ang_brazo, gestos = {'hombro': 90, 'codo': 90}, {'pitch': 90, 'roll_raw': 90, 'pinza': 0}
+        distancia_mano_actual, mano_detectada, codo, muneca = 0, False, [0,0], [0,0]
 
         if results_pose.pose_landmarks:
             ang_brazo, codo, muneca = robot_logic.calcular_angulos_brazo(results_pose.pose_landmarks.landmark, h, w)
@@ -80,7 +75,6 @@ def main():
 
         mano_estable = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
         
-        # 2. MANEJAR MODOS Y CALIBRACIÓN
         tiempo_restante_calibracion = 0
         if modo_actual == config.MODO_CONFIGURACION:
             wrist_y = muneca[1]
@@ -90,31 +84,33 @@ def main():
                 tiempo_transcurrido = time.time() - tiempo_inicio_calibracion
                 tiempo_restante_calibracion = max(0, config.CALIBRATION_TIME - tiempo_transcurrido)
                 if tiempo_transcurrido >= config.CALIBRATION_TIME and mano_detectada:
-                    distancia_referencia = distancia_mano_actual
-                    distancia_rotacion_referencia = distancia_rotacion_actual
+                    distancia_referencia, distancia_rotacion_referencia = distancia_mano_actual, distancia_rotacion_actual
                     calibracion_completada = True
                     print(f"Calibración completada. Distancia ref: {distancia_referencia:.4f}")
                     modo_actual = config.MODO_NORMAL
             else:
                 tiempo_inicio_calibracion = 0
         
-        # 3. ENSAMBLAR, SUAVIZAR Y ENVIAR DATOS
+        target_posture_angles = None
+        if modo_actual == config.MODO_POSTURA and postura_activa:
+            target_posture_angles = config.POSTURAS_PREDEFINIDAS[postura_activa]
+
         angulos_en_bruto = {
             'hombro': ang_brazo['hombro'], 'codo': ang_brazo['codo'],
             'pitch': gestos['pitch'], 'roll': gestos['roll_raw'], 'mano': mano_estable
         }
         
-        # Usamos el procesador para obtener los ángulos finales suavizados
         angulos_finales = angle_processor.smooth_and_process(
-            angulos_en_bruto, distancia_mano_actual, distancia_referencia if calibracion_completada else 0
+            angulos_en_bruto, distancia_mano_actual, 
+            distancia_referencia if calibracion_completada else 0,
+            target_posture=target_posture_angles
         )
 
-        if modo_actual == config.MODO_NORMAL and arduino is not None:
+        if arduino is not None and (modo_actual == config.MODO_NORMAL or modo_actual == config.MODO_POSTURA):
             angulos_seguros = robot_logic.aplicar_limites_seguros(angulos_finales)
             datos = f"<{int(angulos_seguros['proximidad'])},{int(angulos_seguros['hombro'])},{int(angulos_seguros['codo'])},{int(angulos_seguros['pitch'])},{int(angulos_seguros['roll'])},{int(angulos_seguros['mano'])}>\n"
             arduino.write(datos.encode('utf-8'))
 
-        # 4. DIBUJAR LA INTERFAZ GRÁFICA
         lienzo = np.zeros((h + 100, w + 450, 3), dtype=np.uint8)
         panel_sup = crear_panel_superior(w + 450, 100, logo_img)
         lienzo[0:100, 0:w+450] = panel_sup
@@ -124,20 +120,26 @@ def main():
         lienzo[100:100+h, 0:w] = frame
         panel_lat = crear_panel_lateral(
             450, h, angulos_finales, mano_estable, arduino is not None, 
-            modo_actual == config.MODO_CONFIGURACION, tiempo_restante_calibracion
+            modo_actual, tiempo_restante_calibracion
         )
         lienzo[100:100+h, w:w+450] = panel_lat
         cv2.imshow("Control de Brazo Robotico", lienzo)
         
-        # 5. MANEJAR ENTRADA DEL USUARIO
         key = cv2.waitKey(5) & 0xFF
         if key == 27: break
-        if key == 32:
-            modo_actual = 1 - modo_actual
-            tiempo_inicio_calibracion = 0
-            print(f"Modo cambiado a: {'CONFIGURACION' if modo_actual == config.MODO_CONFIGURACION else 'NORMAL'}")
+        elif key == ord(' '):
+            modo_actual = config.MODO_CONFIGURACION
+            postura_activa = None
+            print("Modo cambiado a: CONFIGURACION")
+        elif key == ord('a'):
+            modo_actual = config.MODO_POSTURA
+            postura_activa = 'saludo'
+            print("Activando postura: 'saludo'")
+        elif key == ord('n'):
+            modo_actual = config.MODO_NORMAL
+            postura_activa = None
+            print("Modo cambiado a: NORMAL")
             
-    # --- LIMPIEZA ---
     cap.release()
     if arduino: arduino.close()
     cv2.destroyAllWindows()

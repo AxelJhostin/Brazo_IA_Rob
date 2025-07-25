@@ -1,7 +1,8 @@
 # =================================================================
 # MÓDULO: robot_logic.py
 # DESCRIPCIÓN: Contiene toda la lógica de negocio para el control
-# del brazo: detección de pose, cálculo de ángulos y gestos.
+#              del brazo: detección de pose, cálculo de ángulos y gestos.
+# VERSIÓN: 1.2 - Posturas Predefinidas (26/07/2024)
 # =================================================================
 
 import mediapipe as mp
@@ -10,45 +11,42 @@ import math
 import cv2
 import config
 
-# --- NUEVA CLASE PARA PROCESAR Y SUAVIZAR ÁNGULOS ---
 class AngleProcessor:
     def __init__(self):
-        # Inicializamos los ángulos suavizados en una posición neutral
         self.smoothed_angles = {
-            'proximidad': 90.0,
-            'hombro': 90.0,
-            'codo': 90.0,
-            'pitch': 90.0,
-            'roll': 90.0
+            'proximidad': 90.0, 'hombro': 90.0, 'codo': 90.0,
+            'pitch': 90.0, 'roll': 90.0
         }
 
-    def smooth_and_process(self, raw_angles, distancia_actual, distancia_referencia):
+    def smooth_and_process(self, raw_angles, distancia_actual, distancia_referencia, target_posture=None):
         """
-        Toma los ángulos en bruto, calcula la proximidad y aplica un filtro
-        de suavizado a todos los valores antes de devolverlos.
+        Suaviza los ángulos. Si hay una 'target_posture', se moverá hacia ella.
+        Si no, usará los 'raw_angles' de la cámara.
         """
-        # 1. Calcular valor de proximidad en bruto
-        if distancia_referencia > 0:
-            dist_min = distancia_referencia - (distancia_referencia * config.DISTANCE_RANGE)
-            dist_max = distancia_referencia + (distancia_referencia * config.DISTANCE_RANGE)
-            raw_proximidad = np.interp(distancia_actual, [dist_min, dist_max], [0, 180])
-        else:
-            raw_proximidad = 90
-        
-        raw_angles['proximidad'] = raw_proximidad
+        angles_to_process = {}
 
-        # 2. Aplicar filtro de suavizado a cada ángulo
+        if target_posture:
+            # MODO POSTURA: El objetivo son los ángulos de la postura predefinida.
+            angles_to_process = target_posture
+        else:
+            # MODO NORMAL: El objetivo son los ángulos de la cámara.
+            if distancia_referencia > 0:
+                dist_min = distancia_referencia - (distancia_referencia * config.DISTANCE_RANGE)
+                dist_max = distancia_referencia + (distancia_referencia * config.DISTANCE_RANGE)
+                raw_proximidad = np.interp(distancia_actual, [dist_min, dist_max], [0, 180])
+            else:
+                raw_proximidad = 90
+            raw_angles['proximidad'] = raw_proximidad
+            angles_to_process = raw_angles
+
+        # Aplicar filtro de suavizado a cada ángulo
         smoothed_output = {}
-        for key, raw_value in raw_angles.items():
+        for key, raw_value in angles_to_process.items():
             if key in self.smoothed_angles:
-                # Usar el factor de suavizado correspondiente
                 factor = config.PROXIMITY_FILTER_FACTOR if key == 'proximidad' else config.ANGLE_SMOOTHING_FACTOR
-                
-                # Fórmula del filtro exponencial
                 self.smoothed_angles[key] = (factor * raw_value) + ((1 - factor) * self.smoothed_angles[key])
                 smoothed_output[key] = int(self.smoothed_angles[key])
             else:
-                # Para valores no suavizados como 'mano' (pinza)
                 smoothed_output[key] = raw_value
         
         return smoothed_output

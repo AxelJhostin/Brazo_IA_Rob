@@ -1,6 +1,8 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
 # VERSIÓN: Avanzada con Sistema de Proximidad Mejorado
+# AUTOR: [Hernandez Axel - Version por modulo]
+# FECHA: 2023-10-15
 # =================================================================
 
 import cv2

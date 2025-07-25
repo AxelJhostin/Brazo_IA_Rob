@@ -2,12 +2,13 @@
 # MÓDULO: robot_logic.py
 # DESCRIPCIÓN: Contiene toda la lógica de negocio para el control
 #              del brazo: detección de pose, cálculo de ángulos y gestos.
-# VERSIÓN: 1.2 - Posturas Predefinidas (26/07/2024)
+# VERSIÓN: 1.3.2 - Corregida Detección de Pinza (26/07/2024)
 # =================================================================
 
 import mediapipe as mp
 import numpy as np
 import math
+import time
 import cv2
 import config
 
@@ -18,18 +19,18 @@ class AngleProcessor:
             'pitch': 90.0, 'roll': 90.0
         }
 
-    def smooth_and_process(self, raw_angles, distancia_actual, distancia_referencia, target_posture=None):
-        """
-        Suaviza los ángulos. Si hay una 'target_posture', se moverá hacia ella.
-        Si no, usará los 'raw_angles' de la cámara.
-        """
+    def smooth_and_process(self, raw_angles, distancia_actual, distancia_referencia, target_posture=None, test_servo_key=None):
         angles_to_process = {}
-
-        if target_posture:
-            # MODO POSTURA: El objetivo son los ángulos de la postura predefinida.
+        if test_servo_key:
+            target_angles = {}
+            sweep_angle = np.interp(math.sin(time.time() * config.TEST_SWEEP_SPEED), [-1, 1], [config.TEST_SWEEP_MIN, config.TEST_SWEEP_MAX])
+            for key in self.smoothed_angles.keys():
+                target_angles[key] = sweep_angle if key == test_servo_key else 90
+            target_angles['mano'] = 1 if sweep_angle > 90 else 0 if test_servo_key == 'mano' else raw_angles['mano']
+            angles_to_process = target_angles
+        elif target_posture:
             angles_to_process = target_posture
         else:
-            # MODO NORMAL: El objetivo son los ángulos de la cámara.
             if distancia_referencia > 0:
                 dist_min = distancia_referencia - (distancia_referencia * config.DISTANCE_RANGE)
                 dist_max = distancia_referencia + (distancia_referencia * config.DISTANCE_RANGE)
@@ -39,7 +40,6 @@ class AngleProcessor:
             raw_angles['proximidad'] = raw_proximidad
             angles_to_process = raw_angles
 
-        # Aplicar filtro de suavizado a cada ángulo
         smoothed_output = {}
         for key, raw_value in angles_to_process.items():
             if key in self.smoothed_angles:
@@ -48,10 +48,8 @@ class AngleProcessor:
                 smoothed_output[key] = int(self.smoothed_angles[key])
             else:
                 smoothed_output[key] = raw_value
-        
         return smoothed_output
 
-# --- CLASE POSE DETECTOR (sin cambios) ---
 class PoseDetector:
     def __init__(self):
         self.mp_drawing = mp.solutions.drawing_utils
@@ -65,11 +63,7 @@ class PoseDetector:
     
     def draw_all_landmarks(self, image, pose_results, hand_results):
         if pose_results.pose_landmarks: 
-            self.mp_drawing.draw_landmarks(
-                image, pose_results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS,
-                landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(0, 0, 255), thickness=3, circle_radius=5),
-                connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(180, 180, 180), thickness=3)
-            )
+            self.mp_drawing.draw_landmarks(image, pose_results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS, landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(0, 0, 255), thickness=3, circle_radius=5), connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(180, 180, 180), thickness=3))
             h, w, _ = image.shape
             for idx in [11, 12]:
                 if idx < len(pose_results.pose_landmarks.landmark):
@@ -81,16 +75,11 @@ class PoseDetector:
                     lm = pose_results.pose_landmarks.landmark[idx]
                     cx, cy = int(lm.x * w), int(lm.y * h)
                     cv2.circle(image, (cx, cy), 12, config.COLORES['codo'], -1)
-        
         if hand_results.multi_hand_landmarks:
             for hand_lm in hand_results.multi_hand_landmarks: 
-                self.mp_drawing.draw_landmarks(
-                    image, hand_lm, self.mp_hands.HAND_CONNECTIONS,
-                    landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(0, 0, 255), thickness=3, circle_radius=5),
-                    connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(180, 180, 180), thickness=2)
-                )
+                self.mp_drawing.draw_landmarks(image, hand_lm, self.mp_hands.HAND_CONNECTIONS, landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(0, 0, 255), thickness=3, circle_radius=5), connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(180, 180, 180), thickness=2))
 
-# --- FUNCIONES DE CÁLCULO (sin cambios en su lógica interna) ---
+# --- FUNCIONES DE CÁLCULO ---
 def calcular_angulos_brazo(landmarks, h, w):
     shoulder = [landmarks[12].x * w, landmarks[12].y * h]
     elbow = [landmarks[14].x * w, landmarks[14].y * h]
@@ -111,9 +100,25 @@ def calcular_angulos_brazo(landmarks, h, w):
     return {'hombro': ang_hombro, 'codo': ang_codo}, elbow, wrist
 
 def detectar_pinza(hand_landmarks):
-    puntos = [(4, 2), (8, 6), (12, 10), (16, 14), (20, 18)]
-    flexionados = sum(1 for p1, p2 in puntos if hand_landmarks.landmark[p1].y > hand_landmarks.landmark[p2].y)
-    return 1 if flexionados >= 4 else 0
+    """
+    Detecta el gesto de pinza (cerrar) midiendo la distancia
+    entre la punta del pulgar y la punta del índice.
+    Devuelve 1 si la mano está cerrada (pinza), 0 si está abierta.
+    """
+    try:
+        # Puntos de la punta del pulgar e índice
+        thumb_tip = hand_landmarks.landmark[4]
+        index_tip = hand_landmarks.landmark[8]
+
+        # Calcular la distancia euclidiana normalizada entre los puntos
+        distance = math.sqrt((thumb_tip.x - index_tip.x)**2 + (thumb_tip.y - index_tip.y)**2)
+
+        # Umbral para el gesto de pinza. Este valor puede necesitar ajuste.
+        pinch_threshold = 0.05 
+
+        return 1 if distance < pinch_threshold else 0
+    except:
+        return 0 # Si hay algún error, devuelve 0 (abierta)
 
 def calcular_distancia_mano(hand_landmarks, punto1=5, punto2=17):
     punto_a = hand_landmarks.landmark[punto1]
@@ -136,9 +141,10 @@ def calcular_gestos_mano(hand_landmarks, codo, muneca, distancia_rotacion_ref):
             mr_raw = np.interp(hand_landmarks.landmark[5].x - hand_landmarks.landmark[17].x, [-config.ROLL_INPUT_RANGE, config.ROLL_INPUT_RANGE], [180, 0])
             mr_limitado = np.interp(mr_raw, [0, 180], [config.ROLL_OUTPUT_MIN_ANGLE, config.ROLL_OUTPUT_MAX_ANGLE])
     except: pass
-    p = 0
-    try: p = detectar_pinza(hand_landmarks)
-    except: pass
+    
+    # Llamamos a la nueva función mejorada para detectar la pinza
+    p = detectar_pinza(hand_landmarks)
+    
     return {'pitch': ma, 'roll_raw': mr_limitado, 'pinza': p}
 
 def aplicar_limites_seguros(angulos):

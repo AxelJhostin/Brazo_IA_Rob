@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN: 1.2 - Posturas Predefinidas (26/07/2024)
+# VERSIÓN: 1.3.2 - Corregida Detección de Pinza (26/07/2024)
 # =================================================================
 
 import cv2
@@ -18,7 +18,8 @@ from ui_components import crear_panel_superior, crear_panel_lateral, dibujar_zon
 def main():
     # --- INICIALIZACIÓN ---
     modo_actual = config.MODO_NORMAL
-    postura_activa = None # Para saber qué postura ejecutar
+    postura_activa = None
+    servo_en_prueba = None
     calibracion_completada = False
     distancia_referencia = 0
     distancia_rotacion_referencia = 0
@@ -73,6 +74,8 @@ def main():
                 distancia_rotacion_actual = robot_logic.calcular_distancia_mano(hand_lm, 5, 0)
                 gestos = robot_logic.calcular_gestos_mano(hand_lm, codo_rel, muneca_rel, distancia_rotacion_referencia)
 
+        # BUG CORREGIDO: Actualizamos el buffer del gesto de la pinza en cada fotograma.
+        gesture_buffer.append(gestos['pinza'])
         mano_estable = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
         
         tiempo_restante_calibracion = 0
@@ -94,6 +97,8 @@ def main():
         target_posture_angles = None
         if modo_actual == config.MODO_POSTURA and postura_activa:
             target_posture_angles = config.POSTURAS_PREDEFINIDAS[postura_activa]
+        
+        test_key = servo_en_prueba if modo_actual == config.MODO_PRUEBA else None
 
         angulos_en_bruto = {
             'hombro': ang_brazo['hombro'], 'codo': ang_brazo['codo'],
@@ -103,10 +108,11 @@ def main():
         angulos_finales = angle_processor.smooth_and_process(
             angulos_en_bruto, distancia_mano_actual, 
             distancia_referencia if calibracion_completada else 0,
-            target_posture=target_posture_angles
+            target_posture=target_posture_angles,
+            test_servo_key=test_key
         )
 
-        if arduino is not None and (modo_actual == config.MODO_NORMAL or modo_actual == config.MODO_POSTURA):
+        if arduino is not None:
             angulos_seguros = robot_logic.aplicar_limites_seguros(angulos_finales)
             datos = f"<{int(angulos_seguros['proximidad'])},{int(angulos_seguros['hombro'])},{int(angulos_seguros['codo'])},{int(angulos_seguros['pitch'])},{int(angulos_seguros['roll'])},{int(angulos_seguros['mano'])}>\n"
             arduino.write(datos.encode('utf-8'))
@@ -120,26 +126,33 @@ def main():
         lienzo[100:100+h, 0:w] = frame
         panel_lat = crear_panel_lateral(
             450, h, angulos_finales, mano_estable, arduino is not None, 
-            modo_actual, tiempo_restante_calibracion
+            modo_actual, servo_en_prueba, tiempo_restante_calibracion
         )
         lienzo[100:100+h, w:w+450] = panel_lat
         cv2.imshow("Control de Brazo Robotico", lienzo)
         
         key = cv2.waitKey(5) & 0xFF
         if key == 27: break
-        elif key == ord(' '):
+
+        if key == ord(' '):
             modo_actual = config.MODO_CONFIGURACION
-            postura_activa = None
+            postura_activa, servo_en_prueba = None, None
+            tiempo_inicio_calibracion = 0
             print("Modo cambiado a: CONFIGURACION")
-        elif key == ord('a'):
-            modo_actual = config.MODO_POSTURA
-            postura_activa = 'saludo'
-            print("Activando postura: 'saludo'")
         elif key == ord('n'):
             modo_actual = config.MODO_NORMAL
-            postura_activa = None
+            postura_activa, servo_en_prueba = None, None
             print("Modo cambiado a: NORMAL")
-            
+        elif key == ord('a'):
+            modo_actual = config.MODO_POSTURA
+            postura_activa, servo_en_prueba = 'saludo', None
+            print("Activando postura: 'saludo'")
+        elif ord('1') <= key <= ord('6'):
+            servo_map = {'1':'proximidad','2':'hombro','3':'codo','4':'pitch','5':'roll','6':'mano'}
+            servo_en_prueba = servo_map[chr(key)]
+            modo_actual, postura_activa = config.MODO_PRUEBA, None
+            print(f"Modo cambiado a: PRUEBA - Servo: {servo_en_prueba}")
+
     cap.release()
     if arduino: arduino.close()
     cv2.destroyAllWindows()

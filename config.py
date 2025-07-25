@@ -2,7 +2,7 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #              configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.2 - Posturas Predefinidas (26/07/2024)
+# VERSIÓN: 1.3 - Modo de Prueba de Servos (26/07/2024)
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL ---
@@ -20,7 +20,7 @@ GESTURE_CONFIRMATION_THRESHOLD = 7
 CALIBRATION_TIME = 5
 
 # --- PARÁMETROS DE LÓGICA DEL ROBOT (CÁLCULOS) ---
-ANGLE_SMOOTHING_FACTOR = 0.1 # Más bajo para un movimiento suave a la postura
+ANGLE_SMOOTHING_FACTOR = 0.1 
 PROXIMITY_FILTER_FACTOR = 0.2 
 
 ROLL_INPUT_RANGE = 0.22
@@ -30,41 +30,33 @@ PITCH_INPUT_MIN_ANGLE = 150
 PITCH_INPUT_MAX_ANGLE = 210
 DISTANCE_RANGE = 0.3
 
+# --- PARÁMETROS DEL MODO DE PRUEBA ---
+TEST_SWEEP_MIN = 10   # Ángulo mínimo para el barrido de prueba
+TEST_SWEEP_MAX = 170  # Ángulo máximo para el barrido de prueba
+TEST_SWEEP_SPEED = 2.5 # Velocidad del barrido (más alto = más rápido)
+
 # --- LÍMITES DE SEGURIDAD DE LOS SERVOS (Grados) ---
 ANGULOS_SEGUROS = {
-    'hombro': (30, 160),
-    'codo': (20, 170),
-    'pitch': (0, 180),
-    'roll': (10, 180),
-    'proximidad': (0, 180)
+    'proximidad': (0, 180), 'hombro': (30, 160), 'codo': (20, 170),
+    'pitch': (0, 180), 'roll': (10, 180)
 }
 
 # --- POSTURAS PREDEFINIDAS ---
-# Define aquí las posturas que quieras. La clave es el nombre de la postura.
 POSTURAS_PREDEFINIDAS = {
     'saludo': {
-        'proximidad': 90,
-        'hombro': 120,
-        'codo': 90,
-        'pitch': 90,
-        'roll': 90,
-        'mano': 0  # 0 para abierta, 1 para cerrada
+        'proximidad': 90, 'hombro': 120, 'codo': 90,
+        'pitch': 90, 'roll': 90, 'mano': 0
     }
-    # Puedes añadir más posturas aquí, ej: 'descanso': {...}
 }
-
 
 # --- PARÁMETROS DE LA INTERFAZ GRÁFICA ---
 COLORES = {
-    'proximidad': (0, 0, 255),
-    'hombro': (255, 255, 0),
-    'codo': (0, 165, 255),
-    'pitch': (0, 0, 255),
-    'roll': (150, 50, 200),
-    'mano': (50, 50, 50)
+    'proximidad': (0, 0, 255), 'hombro': (255, 255, 0), 'codo': (0, 165, 255),
+    'pitch': (0, 0, 255), 'roll': (150, 50, 200), 'mano': (50, 50, 50)
 }
 
 # --- ESTADOS DEL PROGRAMA (Para claridad) ---
 MODO_NORMAL = 0
 MODO_CONFIGURACION = 1
-MODO_POSTURA = 2 # Nuevo modo
+MODO_POSTURA = 2
+MODO_PRUEBA = 3 # Nuevo modo

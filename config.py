@@ -2,7 +2,7 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #              configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.4 - Modo Demo Completo (26/07/2024)
+# VERSIÓN: 1.5 - Modo Pausa (26/07/2024)
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL ---
@@ -34,7 +34,6 @@ DISTANCE_RANGE = 0.3
 TEST_SWEEP_MIN = 10
 TEST_SWEEP_MAX = 170
 TEST_SWEEP_SPEED = 1.5
-# NUEVO: Velocidad para el modo de prueba de todos los servos
 TEST_ALL_SERVOS_SPEED = 1.0
 
 # --- LÍMITES DE SEGURIDAD DE LOS SERVOS (Grados) ---
@@ -62,3 +61,4 @@ MODO_NORMAL = 0
 MODO_CONFIGURACION = 1
 MODO_POSTURA = 2
 MODO_PRUEBA = 3
+MODO_PAUSA = 4 # Nuevo modo

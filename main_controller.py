@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN: 1.3.7 - Corregido TypeError en landmarks (26/07/2024)
+# VERSIÓN: 1.5 - Modo Pausa (26/07/2024)
 # =================================================================
 
 import cv2
@@ -55,25 +55,18 @@ def main():
         results_pose = detector.find_pose(image_rgb)
         results_hands = detector.find_hands(image_rgb)
 
-        # --- LÓGICA CENTRALIZADA ---
-        # 1. Obtener todos los ángulos en bruto Y la posición de la muñeca
         angulos_en_bruto, muneca = robot_logic.get_all_raw_angles(
-            results_pose, 
-            results_hands,
-            h, w, calibracion_completada,
+            results_pose, results_hands, h, w, calibracion_completada,
             distancia_referencia, distancia_rotacion_referencia
         )
         
-        # 2. Estabilizar el gesto de la pinza
         gesture_buffer.append(angulos_en_bruto['pinza'])
         mano_estable = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
         angulos_en_bruto['mano'] = mano_estable
         
-        # 3. Manejar modos y calibración
         tiempo_restante_calibracion = 0
         if modo_actual == config.MODO_CONFIGURACION:
             if results_pose.pose_landmarks and results_hands.multi_hand_landmarks:
-                # Usamos la 'muneca' que ya calculamos, sin llamar a otra función
                 wrist_y = muneca[1]
                 zona_alto, start_y = h * 0.20, (h * 0.40)
                 if start_y <= wrist_y <= start_y + zona_alto:
@@ -90,7 +83,6 @@ def main():
                 else:
                     tiempo_inicio_calibracion = 0
         
-        # 4. Determinar los ángulos objetivo según el modo
         final_raw_angles = angulos_en_bruto
         test_key = None
         if modo_actual == config.MODO_POSTURA and postura_activa:
@@ -98,16 +90,15 @@ def main():
         elif modo_actual == config.MODO_PRUEBA:
             test_key = servo_en_prueba
         
-        # 5. Suavizar y enviar los ángulos
         angulos_finales = angle_processor.smooth_angles(final_raw_angles, test_servo_key=test_key)
 
-        if arduino is not None:
+        # --- CONDICIÓN DE PAUSA ---
+        if arduino is not None and modo_actual != config.MODO_PAUSA:
             angulos_seguros = robot_logic.aplicar_limites_seguros(angulos_finales)
             datos = f"<{int(angulos_seguros['proximidad'])},{int(angulos_seguros['hombro'])},{int(angulos_seguros['codo'])},{int(angulos_seguros['pitch'])},{int(angulos_seguros['roll'])},{int(angulos_seguros['mano'])}>\n"
             print(f"Enviando a Arduino: {datos.strip()}")
             arduino.write(datos.encode('utf-8'))
 
-        # 6. Dibujar la interfaz
         lienzo = np.zeros((h + 100, w + 450, 3), dtype=np.uint8)
         panel_sup = crear_panel_superior(w + 450, 100, logo_img)
         lienzo[0:100, 0:w+450] = panel_sup
@@ -119,7 +110,6 @@ def main():
         lienzo[100:100+h, w:w+450] = panel_lat
         cv2.imshow("Control de Brazo Robotico", lienzo)
         
-        # 7. Manejar teclas
         key = cv2.waitKey(5) & 0xFF
         if key == 27: break
 
@@ -130,6 +120,9 @@ def main():
             modo_actual, postura_activa, servo_en_prueba = config.MODO_NORMAL, None, None; print("Modo cambiado a: NORMAL")
         elif key == ord('a'):
             modo_actual, postura_activa, servo_en_prueba = config.MODO_POSTURA, 'saludo', None; print("Activando postura: 'saludo'")
+        elif key == ord('p'):
+            modo_actual = config.MODO_PAUSA
+            print("Modo cambiado a: PAUSA")
         elif ord('1') <= key <= ord('7'):
             servo_map = {'1':'proximidad','2':'hombro','3':'codo','4':'pitch','5':'roll','6':'mano', '7':'all'}
             servo_en_prueba = servo_map[chr(key)]
@@ -141,3 +134,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+        

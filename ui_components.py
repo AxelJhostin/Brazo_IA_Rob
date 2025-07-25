@@ -2,7 +2,7 @@
 # MÓDULO: ui_components.py
 # DESCRIPCIÓN: Contiene todas las funciones para dibujar la
 #              interfaz gráfica del controlador del brazo robótico.
-# VERSIÓN: 1.4 - Modo Demo Completo (26/07/2024)
+# VERSIÓN: 1.5 - Modo Pausa (26/07/2024)
 # =================================================================
 
 import numpy as np
@@ -63,6 +63,10 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
             cv2.putText(panel, f"Probando: {texto_prueba}", (ancho // 2 - 140, 170), font_texto, 0.9, (0,0,0), grosor_normal)
         cv2.line(panel, (25, 190), (ancho - 25, 190), (200, 200, 200), 2)
         y_start = 220
+    elif modo_actual == config.MODO_PAUSA:
+        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (0, 165, 255), -1) # Naranja
+        cv2.putText(panel, "MODO PAUSA", (ancho // 2 - 130, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
+        cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
     else: # MODO_NORMAL
         cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (40, 40, 40), -1)
         cv2.putText(panel, "MODO OPERACION", (ancho // 2 - 150, 110), font_modo, 1.1, (0, 255, 0), grosor_modo)

@@ -2,7 +2,7 @@
 # MÓDULO: robot_logic.py
 # DESCRIPCIÓN: Contiene toda la lógica de negocio para el control
 #              del brazo: detección de pose, cálculo de ángulos y gestos.
-# VERSIÓN: 1.3.7 - Corregido TypeError en landmarks (26/07/2024)
+# VERSIÓN: 1.6 - Corregido Movimiento de Muñeca (Pitch) (26/07/2024)
 # =================================================================
 
 import mediapipe as mp
@@ -14,12 +14,8 @@ import config
 
 # --- FUNCIÓN MAESTRA PARA OBTENER TODOS LOS ÁNGULOS ---
 def get_all_raw_angles(pose_results, hand_results, h, w, calibracion_completada, dist_ref, dist_rot_ref):
-    """
-    Función principal que procesa los datos de visión y devuelve un 
-    diccionario completo con todos los ángulos en bruto y las coordenadas de la muñeca.
-    """
     raw_angles = {'proximidad': 90, 'hombro': 90, 'codo': 90, 'pitch': 90, 'roll': 90, 'pinza': 0}
-    muneca = [0, 0] # Inicializamos la muñeca
+    muneca = [0, 0]
 
     if pose_results and pose_results.pose_landmarks:
         ang_brazo, codo, muneca = _calcular_angulos_brazo(pose_results.pose_landmarks, h, w)
@@ -27,8 +23,7 @@ def get_all_raw_angles(pose_results, hand_results, h, w, calibracion_completada,
 
         if hand_results and hand_results.multi_hand_landmarks:
             hand_lm = hand_results.multi_hand_landmarks[0]
-            codo_rel, muneca_rel = [codo[0]/w, codo[1]/h], [muneca[0]/w, muneca[1]/h]
-            gestos = _calcular_gestos_mano(hand_lm, codo_rel, muneca_rel, dist_rot_ref)
+            gestos = _calcular_gestos_mano(hand_lm, dist_rot_ref)
             raw_angles.update({'pitch': gestos['pitch'], 'roll': gestos['roll_raw'], 'pinza': gestos['pinza']})
 
             if calibracion_completada:
@@ -61,7 +56,7 @@ class AngleProcessor:
                 sweep_angle = np.interp(math.sin(time.time() * config.TEST_SWEEP_SPEED), [-1, 1], [config.TEST_SWEEP_MIN, config.TEST_SWEEP_MAX])
                 for key in self.smoothed_angles.keys():
                     target_angles[key] = sweep_angle if key == test_servo_key else 90
-                target_angles['mano'] = 1 if sweep_angle > 90 else 0 if test_servo_key == 'mano' else 0
+                target_angles['mano'] = 1 if sweep_angle > 90 else 0 if test_servo_key == 'mano' else raw_angles.get('mano', 0)
         
         smoothed_output = {}
         for key, raw_value in target_angles.items():
@@ -107,20 +102,15 @@ def _calcular_proximidad_bruta(distancia_actual, distancia_referencia):
     return 90
 
 def _calcular_angulos_brazo(landmarks, h, w):
-    # --- CORRECCIÓN DEL BUG ---
-    # Se accede a los puntos a través de la propiedad '.landmark'
     lm = landmarks.landmark
     shoulder = [lm[12].x * w, lm[12].y * h]; elbow = [lm[14].x * w, lm[14].y * h]; wrist = [lm[16].x * w, lm[16].y * h]
-    
     vec_shoulder_elbow = [elbow[0] - shoulder[0], elbow[1] - shoulder[1]]; mag_vec = np.linalg.norm(vec_shoulder_elbow)
     ang_hombro = 90
     if mag_vec > 0: ang_hombro = np.degrees(np.arccos(max(min(np.dot(vec_shoulder_elbow, [0, -1]) / mag_vec, 1), -1)))
-    
     vec1 = [shoulder[0] - elbow[0], shoulder[1] - elbow[1]]; vec2 = [wrist[0] - elbow[0], wrist[1] - elbow[1]]
     mag1, mag2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
     ang_codo = 90
     if mag1 > 0 and mag2 > 0: ang_codo = np.degrees(np.arccos(max(min(np.dot(vec1, vec2) / (mag1 * mag2), 1), -1)))
-    
     return ({'hombro': ang_hombro, 'codo': ang_codo}, elbow, wrist)
 
 def _detectar_pinza(hand_landmarks):
@@ -134,12 +124,20 @@ def _calcular_distancia_mano(hand_landmarks, punto1=5, punto2=17):
     punto_a = hand_landmarks.landmark[punto1]; punto_b = hand_landmarks.landmark[punto2]
     return math.sqrt((punto_a.x - punto_b.x)**2 + (punto_a.y - punto_b.y)**2)
 
-def _calcular_gestos_mano(hand_landmarks, codo, muneca, distancia_rotacion_ref):
-    ma = 90
+def _calcular_gestos_mano(hand_landmarks, distancia_rotacion_ref):
+    # --- LÓGICA DE PITCH MEJORADA ---
+    ma = 90 # Valor por defecto para pitch
     try:
-        ma_raw = math.degrees(math.atan2(hand_landmarks.landmark[5].y - muneca[1], hand_landmarks.landmark[5].x - muneca[0]) - math.atan2(codo[1] - muneca[1], codo[0] - muneca[0]))
-        ma = np.interp(abs(ma_raw), [config.PITCH_INPUT_MIN_ANGLE, config.PITCH_INPUT_MAX_ANGLE], [180, 0])
+        # Puntos de la muñeca (0) y nudillo del dedo medio (9)
+        wrist_y = hand_landmarks.landmark[0].y
+        mcp_y = hand_landmarks.landmark[9].y
+        # Diferencia vertical normalizada
+        y_diff = wrist_y - mcp_y
+        # Mapeamos la diferencia al rango del servo (0-180)
+        ma = np.interp(y_diff, [config.PITCH_INPUT_RANGE_MIN, config.PITCH_INPUT_RANGE_MAX], [0, 180])
     except: pass
+
+    # --- Lógica de Roll (sin cambios) ---
     mr_limitado = 90
     try:
         distancia_actual_rotacion = _calcular_distancia_mano(hand_landmarks, 5, 0)
@@ -150,6 +148,7 @@ def _calcular_gestos_mano(hand_landmarks, codo, muneca, distancia_rotacion_ref):
             mr_raw = np.interp(hand_landmarks.landmark[5].x - hand_landmarks.landmark[17].x, [-config.ROLL_INPUT_RANGE, config.ROLL_INPUT_RANGE], [180, 0])
             mr_limitado = np.interp(mr_raw, [0, 180], [config.ROLL_OUTPUT_MIN_ANGLE, config.ROLL_OUTPUT_MAX_ANGLE])
     except: pass
+    
     p = _detectar_pinza(hand_landmarks)
     return {'pitch': ma, 'roll_raw': mr_limitado, 'pinza': p}
 

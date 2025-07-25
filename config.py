@@ -2,7 +2,7 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #              configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.5 - Modo Pausa (26/07/2024)
+# VERSIÓN: 1.6 - Corregido Movimiento de Muñeca (Pitch) (26/07/2024)
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL ---
@@ -24,10 +24,11 @@ ANGLE_SMOOTHING_FACTOR = 0.1
 PROXIMITY_FILTER_FACTOR = 0.2 
 
 ROLL_INPUT_RANGE = 0.22
-ROLL_OUTPUT_MIN_ANGLE = 10
-ROLL_OUTPUT_MAX_ANGLE = 180
-PITCH_INPUT_MIN_ANGLE = 150
-PITCH_INPUT_MAX_ANGLE = 210
+# NUEVO: Rango para el movimiento de la muñeca (Pitch). Representa la diferencia
+# de altura normalizada entre la muñeca y los nudillos.
+PITCH_INPUT_RANGE_MIN = -0.08
+PITCH_INPUT_RANGE_MAX = 0.08
+
 DISTANCE_RANGE = 0.3
 
 # --- PARÁMETROS DEL MODO DE PRUEBA ---
@@ -61,4 +62,4 @@ MODO_NORMAL = 0
 MODO_CONFIGURACION = 1
 MODO_POSTURA = 2
 MODO_PRUEBA = 3
-MODO_PAUSA = 4 # Nuevo modo
+MODO_PAUSA = 4

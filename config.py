@@ -2,7 +2,7 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #              configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.3 - Modo de Prueba de Servos (26/07/2024)
+# VERSIÓN: 1.4 - Modo Demo Completo (26/07/2024)
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL ---
@@ -31,9 +31,11 @@ PITCH_INPUT_MAX_ANGLE = 210
 DISTANCE_RANGE = 0.3
 
 # --- PARÁMETROS DEL MODO DE PRUEBA ---
-TEST_SWEEP_MIN = 10   # Ángulo mínimo para el barrido de prueba
-TEST_SWEEP_MAX = 170  # Ángulo máximo para el barrido de prueba
-TEST_SWEEP_SPEED = 2.5 # Velocidad del barrido (más alto = más rápido)
+TEST_SWEEP_MIN = 10
+TEST_SWEEP_MAX = 170
+TEST_SWEEP_SPEED = 1.5
+# NUEVO: Velocidad para el modo de prueba de todos los servos
+TEST_ALL_SERVOS_SPEED = 1.0
 
 # --- LÍMITES DE SEGURIDAD DE LOS SERVOS (Grados) ---
 ANGULOS_SEGUROS = {
@@ -59,4 +61,4 @@ COLORES = {
 MODO_NORMAL = 0
 MODO_CONFIGURACION = 1
 MODO_POSTURA = 2
-MODO_PRUEBA = 3 # Nuevo modo
+MODO_PRUEBA = 3

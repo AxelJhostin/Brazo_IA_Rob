@@ -2,7 +2,7 @@
 # MÓDULO: ui_components.py
 # DESCRIPCIÓN: Contiene todas las funciones para dibujar la
 #              interfaz gráfica del controlador del brazo robótico.
-# VERSIÓN: 1.3 - Modo de Prueba de Servos (26/07/2024)
+# VERSIÓN: 1.4 - Modo Demo Completo (26/07/2024)
 # =================================================================
 
 import numpy as np
@@ -39,7 +39,7 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
     color_serial = (0, 180, 0) if conexion_serial else (0, 0, 180)
     cv2.putText(panel, f"SERIAL: {estado_serial}", (30, 50), font_texto, 0.9, color_serial, grosor_normal)
 
-    y_start = 160 # Default y_start
+    y_start = 160
     if modo_actual == config.MODO_CONFIGURACION:
         cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (40, 40, 40), -1)
         cv2.putText(panel, "MODO CONFIGURACION", (ancho // 2 - 220, 110), font_modo, 1.1, (0, 255, 255), grosor_modo)
@@ -52,14 +52,15 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, mod
         cv2.line(panel, (25, 190), (ancho - 25, 190), (200, 200, 200), 2)
         y_start = 220
     elif modo_actual == config.MODO_POSTURA:
-        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (128, 0, 128), -1) # Púrpura
+        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (128, 0, 128), -1)
         cv2.putText(panel, "MODO POSTURA", (ancho // 2 - 150, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
         cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
     elif modo_actual == config.MODO_PRUEBA:
-        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (200, 100, 0), -1) # Azul
+        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (200, 100, 0), -1)
         cv2.putText(panel, "MODO PRUEBA", (ancho // 2 - 140, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
         if servo_en_prueba:
-            cv2.putText(panel, f"Probando: {servo_en_prueba.upper()}", (ancho // 2 - 120, 170), font_texto, 0.9, (0,0,0), grosor_normal)
+            texto_prueba = "TODOS LOS SERVOS" if servo_en_prueba == 'all' else servo_en_prueba.upper()
+            cv2.putText(panel, f"Probando: {texto_prueba}", (ancho // 2 - 140, 170), font_texto, 0.9, (0,0,0), grosor_normal)
         cv2.line(panel, (25, 190), (ancho - 25, 190), (200, 200, 200), 2)
         y_start = 220
     else: # MODO_NORMAL

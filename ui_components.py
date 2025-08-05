@@ -2,7 +2,7 @@
 # MÓDULO: ui_components.py
 # DESCRIPCIÓN: Contiene todas las funciones para dibujar la
 #              interfaz gráfica del controlador del brazo robótico.
-# VERSIÓN: 1.5 - Modo Pausa (26/07/2024)
+# VERSIÓN: 1.6 - Adaptado para Wi-Fi
 # =================================================================
 
 import numpy as np
@@ -30,14 +30,14 @@ def crear_panel_superior(ancho_total, alto=90, logo_img=None):
         except Exception as e: print(f"Error dibujando logo: {str(e)}")
     return panel
 
-def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_serial, modo_actual, servo_en_prueba=None, tiempo_restante=0):
+def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, modo_actual, servo_en_prueba=None, tiempo_restante=0):
     panel = np.ones((alto, ancho, 3), dtype=np.uint8) * 255
     font_modo, font_texto, font_valores = cv2.FONT_HERSHEY_DUPLEX, cv2.FONT_HERSHEY_SIMPLEX, cv2.FONT_HERSHEY_SIMPLEX
     grosor_normal, grosor_modo, grosor_valores = 2, 2, 2
     
-    estado_serial = "CONECTADO" if conexion_serial else "DESCONECTADO"
-    color_serial = (0, 180, 0) if conexion_serial else (0, 0, 180)
-    cv2.putText(panel, f"SERIAL: {estado_serial}", (30, 50), font_texto, 0.9, color_serial, grosor_normal)
+    estado_conexion = "CONECTADO" if conexion_activa else "DESCONECTADO"
+    color_conexion = (0, 180, 0) if conexion_activa else (0, 0, 180)
+    cv2.putText(panel, f"CONEXIÓN: {estado_conexion}", (30, 50), font_texto, 0.9, color_conexion, grosor_normal)
 
     y_start = 160
     if modo_actual == config.MODO_CONFIGURACION:
@@ -95,5 +95,4 @@ def dibujar_zona_calibracion(frame, ancho, alto):
     overlay = frame.copy()
     cv2.rectangle(overlay, (0, start_y), (ancho, end_y), (0, 255, 255), -1)
     cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
-    cv2.putText(frame, "ZONA DE CALIBRACION", (ancho // 2 - 220, start_y - 30), cv2.FONT_HERSHEY_DUPLEX, 1.1, (0, 0, 0), 3)
-    cv2.putText(frame, "Mantenga el brazo recto aqui", (ancho // 2 - 220, start_y + 40), cv2.FONT_HERSHEY_COMPLEX, 0.9, (0, 0, 0), 2)
+    cv2.putText(frame, "ZONA DE CALIBRACION", (ancho // 2 - 220, start_y - 30), cv2.FONT_HERSHEY_DUPLEX

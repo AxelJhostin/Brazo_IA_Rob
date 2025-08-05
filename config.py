@@ -2,12 +2,12 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #              configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.6 - Corregido Movimiento de Muñeca (Pitch) (26/07/2024)
+# VERSIÓN: 1.7 - Adaptado para Wi-Fi (UDP)
 # =================================================================
 
-# --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL ---
-SERIAL_PORT = 'COM4'
-BAUD_RATE = 115200
+# --- CONFIGURACIÓN DE COMUNICACIÓN POR WI-FI (UDP) ---
+ESP_IP = "192.168.186.208"  # <-- ¡IMPORTANTE! La IP de tu ESP8266
+ESP_PORT = 4210
 
 # --- PARÁMETROS DE LA CÁMARA Y PROCESAMIENTO ---
 CAMERA_INDEX = 0
@@ -24,8 +24,6 @@ ANGLE_SMOOTHING_FACTOR = 0.1
 PROXIMITY_FILTER_FACTOR = 0.2 
 
 ROLL_INPUT_RANGE = 0.22
-# NUEVO: Rango para el movimiento de la muñeca (Pitch). Representa la diferencia
-# de altura normalizada entre la muñeca y los nudillos.
 PITCH_INPUT_RANGE_MIN = -0.08
 PITCH_INPUT_RANGE_MAX = 0.08
 

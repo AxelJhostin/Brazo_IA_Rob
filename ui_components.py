@@ -95,4 +95,5 @@ def dibujar_zona_calibracion(frame, ancho, alto):
     overlay = frame.copy()
     cv2.rectangle(overlay, (0, start_y), (ancho, end_y), (0, 255, 255), -1)
     cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
-    cv2.putText(frame, "ZONA DE CALIBRACION", (ancho // 2 - 220, start_y - 30), cv2.FONT_HERSHEY_DUPLEX
+    cv2.putText(frame, "ZONA DE CALIBRACION", (ancho // 2 - 220, start_y - 30), cv2.FONT_HERSHEY_DUPLEX, 1.1, (0, 0, 0), 3)
+    cv2.putText(frame, "Mantenga el brazo recto aqui", (ancho // 2 - 220, start_y + 40), cv2.FONT_HERSHEY_COMPLEX, 0.9, (0, 0, 0), 2)

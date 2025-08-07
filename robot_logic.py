@@ -85,4 +85,74 @@ class PoseDetector:
             h, w, _ = image.shape
             for idx in [11, 12]:
                 if idx < len(pose_results.pose_landmarks.landmark):
-                    lm = pose_results.pose_landmarks.landmark[idx]; cx, cy = int(lm.x * w), int(lm.y * h); cv2.circle(image, (cx, cy), 12, config.COLORES['hombro'],
+                    lm = pose_results.pose_landmarks.landmark[idx]; cx, cy = int(lm.x * w), int(lm.y * h); cv2.circle(image, (cx, cy), 12, config.COLORES['hombro'], -1)
+            for idx in [13, 14]:
+                if idx < len(pose_results.pose_landmarks.landmark):
+                    lm = pose_results.pose_landmarks.landmark[idx]; cx, cy = int(lm.x * w), int(lm.y * h); cv2.circle(image, (cx, cy), 12, config.COLORES['codo'], -1)
+        if hand_results and hand_results.multi_hand_landmarks:
+            for hand_lm in hand_results.multi_hand_landmarks: 
+                self.mp_drawing.draw_landmarks(image, hand_lm, self.mp_hands.HAND_CONNECTIONS, landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(0, 0, 255), thickness=3, circle_radius=5), connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(180, 180, 180), thickness=2))
+
+# --- FUNCIONES AUXILIARES (PRIVADAS) ---
+def _calcular_proximidad_bruta(distancia_actual, distancia_referencia):
+    if distancia_referencia > 0:
+        dist_min = distancia_referencia - (distancia_referencia * config.DISTANCE_RANGE)
+        dist_max = distancia_referencia + (distancia_referencia * config.DISTANCE_RANGE)
+        return np.interp(distancia_actual, [dist_min, dist_max], [0, 180])
+    return 90
+
+def _calcular_angulos_brazo(landmarks, h, w):
+    lm = landmarks.landmark
+    shoulder = [lm[12].x * w, lm[12].y * h]; elbow = [lm[14].x * w, lm[14].y * h]; wrist = [lm[16].x * w, lm[16].y * h]
+    vec_shoulder_elbow = [elbow[0] - shoulder[0], elbow[1] - shoulder[1]]; mag_vec = np.linalg.norm(vec_shoulder_elbow)
+    ang_hombro = 90
+    if mag_vec > 0: ang_hombro = np.degrees(np.arccos(max(min(np.dot(vec_shoulder_elbow, [0, -1]) / mag_vec, 1), -1)))
+    vec1 = [shoulder[0] - elbow[0], shoulder[1] - elbow[1]]; vec2 = [wrist[0] - elbow[0], wrist[1] - elbow[1]]
+    mag1, mag2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
+    ang_codo = 90
+    if mag1 > 0 and mag2 > 0: ang_codo = np.degrees(np.arccos(max(min(np.dot(vec1, vec2) / (mag1 * mag2), 1), -1)))
+    return ({'hombro': ang_hombro, 'codo': ang_codo}, elbow, wrist)
+
+def _detectar_pinza(hand_landmarks):
+    try:
+        thumb_tip = hand_landmarks.landmark[4]; index_tip = hand_landmarks.landmark[8]
+        distance = math.sqrt((thumb_tip.x - index_tip.x)**2 + (thumb_tip.y - index_tip.y)**2)
+        return 1 if distance < 0.05 else 0
+    except: return 0
+
+def _calcular_distancia_mano(hand_landmarks, punto1=5, punto2=17):
+    punto_a = hand_landmarks.landmark[punto1]; punto_b = hand_landmarks.landmark[punto2]
+    return math.sqrt((punto_a.x - punto_b.x)**2 + (punto_a.y - punto_b.y)**2)
+
+def _calcular_gestos_mano(hand_landmarks, distancia_rotacion_ref):
+    ma = 90
+    try:
+        wrist_y = hand_landmarks.landmark[0].y
+        mcp_y = hand_landmarks.landmark[9].y
+        y_diff = wrist_y - mcp_y
+        ma = np.interp(y_diff, [config.PITCH_INPUT_RANGE_MIN, config.PITCH_INPUT_RANGE_MAX], [0, 180])
+    except: pass
+
+    mr_limitado = 90
+    try:
+        distancia_actual_rotacion = _calcular_distancia_mano(hand_landmarks, 5, 0)
+        if distancia_rotacion_ref > 0:
+            variacion_rotacion = distancia_actual_rotacion - distancia_rotacion_ref
+            mr_limitado = np.interp(variacion_rotacion, [-config.ROLL_INPUT_RANGE, config.ROLL_INPUT_RANGE], [config.ROLL_OUTPUT_MIN_ANGLE, config.ROLL_OUTPUT_MAX_ANGLE])
+        else:
+            mr_raw = np.interp(hand_landmarks.landmark[5].x - hand_landmarks.landmark[17].x, [-config.ROLL_INPUT_RANGE, config.ROLL_INPUT_RANGE], [180, 0])
+            mr_limitado = np.interp(mr_raw, [0, 180], [config.ROLL_OUTPUT_MIN_ANGLE, config.ROLL_OUTPUT_MAX_ANGLE])
+    except: pass
+    
+    p = _detectar_pinza(hand_landmarks)
+    return {'pitch': ma, 'roll_raw': mr_limitado, 'pinza': p}
+
+def aplicar_limites_seguros(angulos):
+    angulos_limitados = {}
+    for eje, valor in angulos.items():
+        if eje in config.ANGULOS_SEGUROS:
+            min_val, max_val = config.ANGULOS_SEGUROS[eje]
+            angulos_limitados[eje] = max(min_val, min(max_val, valor))
+        else:
+            angulos_limitados[eje] = valor
+    return angulos_limitados

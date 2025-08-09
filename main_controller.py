@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN: 1.5.0 - Añadidos Gestos Predefinidos
+# VERSIÓN: 1.7.0 - Refactorizado el manejo de teclas
 # =================================================================
 
 import cv2
@@ -45,6 +45,15 @@ def main():
     
     detector = robot_logic.PoseDetector()
     gesture_buffer = deque(maxlen=config.GESTURE_BUFFER_SIZE)
+
+    key_actions = {
+        ord(' '): (config.MODO_CONFIGURACION, None, "Modo cambiado a: CONFIGURACION"),
+        ord('o'): (config.MODO_NORMAL, None, "Modo cambiado a: NORMAL"),
+        ord('a'): (config.MODO_POSTURA, 'saludo', "Activando postura: 'saludo'"),
+        ord('z'): (config.MODO_POSTURA, 'home', "Activando postura: 'home'"),
+        ord('s'): (config.MODO_GESTO_SI, None, "Activando Gesto: 'SI'"),
+        ord('n'): (config.MODO_GESTO_NO, None, "Activando Gesto: 'NO'"),
+    }
     
     # --- BUCLE PRINCIPAL ---
     while cap.isOpened():
@@ -116,32 +125,29 @@ def main():
             dibujar_zona_calibracion(frame, w, h)
         lienzo[100:100+h, 0:w] = frame
         
-        panel_lat = crear_panel_lateral(450, h, angulos_finales, mano_estable, conexion_brazo, modo_actual, servo_en_prueba, tiempo_restante_calibracion)
+        panel_lat = crear_panel_lateral(450, h, angulos_finales, mano_estable, conexion_brazo, modo_actual, servo_en_prueba, tiempo_restante_calibracion, postura_activa)
         lienzo[100:100+h, w:w+450] = panel_lat
         cv2.imshow("Control de Brazo Robotico", lienzo)
         
         key = cv2.waitKey(5) & 0xFF
         if key == 27: break
 
-        if key == ord(' '):
-            modo_actual, postura_activa, servo_en_prueba = config.MODO_CONFIGURACION, None, None
-            tiempo_inicio_calibracion = 0; print("Modo cambiado a: CONFIGURACION")
-        elif key == ord('o'): # CAMBIADO DE 'n' a 'o'
-            modo_actual, postura_activa, servo_en_prueba = config.MODO_NORMAL, None, None; print("Modo cambiado a: NORMAL")
-        elif key == ord('a'):
-            modo_actual, postura_activa, servo_en_prueba = config.MODO_POSTURA, 'saludo', None; print("Activando postura: 'saludo'")
-        elif key == ord('z'):
-            modo_actual, postura_activa, servo_en_prueba = config.MODO_POSTURA, 'home', None; print("Activando postura: 'home'")
+        # --- REFACTORIZACIÓN: Lógica de manejo de teclas ---
+        if key in key_actions:
+            modo_actual, postura_activa, msg = key_actions[key]
+            servo_en_prueba = None # Resetea el servo en prueba al cambiar de modo
+            if key == ord(' '):
+                tiempo_inicio_calibracion = 0 # Resetea el tiempo de calibración
+            print(msg)
         elif key == ord('p'):
-            modo_actual = config.MODO_PAUSA; print("Modo cambiado a: PAUSA")
-        elif key == ord('s'): # NUEVO GESTO
-            modo_actual, postura_activa, servo_en_prueba = config.MODO_GESTO_SI, None, None; print("Activando Gesto: 'SI'")
-        elif key == ord('n'): # NUEVO GESTO
-            modo_actual, postura_activa, servo_en_prueba = config.MODO_GESTO_NO, None, None; print("Activando Gesto: 'NO'")
+            modo_actual = config.MODO_PAUSA
+            print("Modo cambiado a: PAUSA")
         elif ord('1') <= key <= ord('7'):
             servo_map = {'1':'proximidad','2':'hombro','3':'codo','4':'pitch','5':'roll','6':'mano', '7':'all'}
             servo_en_prueba = servo_map[chr(key)]
-            modo_actual, postura_activa = config.MODO_PRUEBA, None; print(f"Modo cambiado a: PRUEBA - Servo: {servo_en_prueba}")
+            modo_actual, postura_activa = config.MODO_PRUEBA, None
+            print(f"Modo cambiado a: PRUEBA - Servo: {servo_en_prueba}")
+
 
     cap.release()
     if sock:

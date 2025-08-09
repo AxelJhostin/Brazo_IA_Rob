@@ -2,7 +2,7 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #               configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.9 - Añadidos modos de gestos
+# VERSIÓN: 2.1 - Añadido MODO_MANUAL
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN POR WI-FI (UDP) ---
@@ -53,7 +53,7 @@ POSTURAS_PREDEFINIDAS = {
     'home': {
         'proximidad': 90, 'hombro': 90, 'codo': 90,
         'pitch': 90, 'roll': 90, 'mano': 0
-    },
+    }
 }
 
 # --- PARÁMETROS DE LA INTERFAZ GRÁFICA ---
@@ -70,3 +70,4 @@ MODO_PRUEBA = 3
 MODO_PAUSA = 4
 MODO_GESTO_SI = 5
 MODO_GESTO_NO = 6
+MODO_MANUAL = 7 

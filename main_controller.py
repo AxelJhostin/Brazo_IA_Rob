@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN: 1.7.0 - Refactorizado el manejo de teclas
+# VERSIÓN: 1.8.1 - Corregida la detección de teclas de flecha
 # =================================================================
 
 import cv2
@@ -22,21 +22,23 @@ def main():
     distancia_referencia, distancia_rotacion_referencia = 0, 0
     tiempo_inicio_calibracion = 0
     
+    # --- Variables para el Modo Manual ---
+    articulacion_seleccionada_idx = 0
+    manual_angles = {}
+    articulaciones_keys = ['proximidad', 'hombro', 'codo', 'pitch', 'roll', 'mano']
+    
     angle_processor = robot_logic.AngleProcessor()
 
     cv2.namedWindow("Control de Brazo Robotico", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Control de Brazo Robotico", 1600, 900)
     logo_img = cv2.imread("logo_puce.png") if os.path.exists("logo_puce.png") else None
     
-    # --- CONFIGURACIÓN DE RED UDP ---
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         conexion_brazo = True
         print(f"Socket creado. Enviando datos a {config.ESP_IP}:{config.ESP_PORT}")
     except Exception as e:
-        sock = None
-        conexion_brazo = False
-        print(f"Error al crear el socket: {e}")
+        sock = None; conexion_brazo = False; print(f"Error al crear el socket: {e}")
 
     cap = cv2.VideoCapture(config.CAMERA_INDEX)
     if not cap.isOpened(): print("Error: No se pudo abrir la cámara"); return
@@ -70,88 +72,87 @@ def main():
         final_raw_angles = {}
         test_key = None
         
-        if modo_actual == config.MODO_PRUEBA:
+        if modo_actual == config.MODO_MANUAL:
+            final_raw_angles = manual_angles
+        elif modo_actual == config.MODO_PRUEBA:
             test_key = servo_en_prueba
         elif modo_actual == config.MODO_POSTURA and postura_activa:
             final_raw_angles = config.POSTURAS_PREDEFINIDAS[postura_activa]
         elif modo_actual in [config.MODO_GESTO_SI, config.MODO_GESTO_NO]:
             if results_hands and results_hands.multi_hand_landmarks:
-                hand_lm = results_hands.multi_hand_landmarks[0]
-                final_raw_angles['pinza'] = robot_logic._detectar_pinza(hand_lm)
-                gesture_buffer.append(final_raw_angles['pinza'])
-                final_raw_angles['mano'] = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
-        else: # MODO_NORMAL o MODO_CONFIGURACION
+                final_raw_angles['pinza'] = robot_logic._detectar_pinza(results_hands.multi_hand_landmarks[0])
+        else:
             final_raw_angles, muneca = robot_logic.get_all_raw_angles(
                 results_pose, results_hands, h, w, calibracion_completada,
                 distancia_referencia, distancia_rotacion_referencia
             )
-            gesture_buffer.append(final_raw_angles['pinza'])
-            mano_estable = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
-            final_raw_angles['mano'] = mano_estable
-            
-            tiempo_restante_calibracion = 0
-            if modo_actual == config.MODO_CONFIGURACION:
-                if results_pose.pose_landmarks and results_hands.multi_hand_landmarks:
-                    wrist_y = muneca[1]
-                    zona_alto, start_y = h * 0.20, (h * 0.40)
-                    if start_y <= wrist_y <= start_y + zona_alto:
-                        if tiempo_inicio_calibracion == 0: tiempo_inicio_calibracion = time.time()
-                        tiempo_transcurrido = time.time() - tiempo_inicio_calibracion
-                        tiempo_restante_calibracion = max(0, config.CALIBRATION_TIME - tiempo_transcurrido)
-                        if tiempo_transcurrido >= config.CALIBRATION_TIME:
-                            hand_lm = results_hands.multi_hand_landmarks[0]
-                            distancia_referencia = robot_logic._calcular_distancia_mano(hand_lm)
-                            distancia_rotacion_referencia = robot_logic._calcular_distancia_mano(hand_lm, 5, 0)
-                            calibracion_completada = True
-                            print(f"Calibración completada. Distancia ref: {distancia_referencia:.4f}")
-                            modo_actual = config.MODO_NORMAL
-                    else:
-                        tiempo_inicio_calibracion = 0
         
-        mano_estable = final_raw_angles.get('mano', 0)
+        if modo_actual not in [config.MODO_PRUEBA, config.MODO_MANUAL]:
+             if results_hands and results_hands.multi_hand_landmarks:
+                gesture_buffer.append(robot_logic._detectar_pinza(results_hands.multi_hand_landmarks[0]))
+        
+        mano_estable = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
+        if 'mano' not in final_raw_angles:
+            final_raw_angles['mano'] = mano_estable
+
         angulos_finales = angle_processor.smooth_angles(final_raw_angles, test_servo_key=test_key, modo_actual=modo_actual)
+        
+        if modo_actual == config.MODO_MANUAL:
+            manual_angles = angulos_finales.copy()
 
         if conexion_brazo and modo_actual != config.MODO_PAUSA:
             angulos_seguros = robot_logic.aplicar_limites_seguros(angulos_finales)
             datos = f"<{int(angulos_seguros['proximidad'])},{int(angulos_seguros['hombro'])},{int(angulos_seguros['codo'])},{int(angulos_seguros['pitch'])},{int(angulos_seguros['roll'])},{int(angulos_seguros['mano'])}>"
-            
             sock.sendto(datos.encode('utf-8'), (config.ESP_IP, config.ESP_PORT))
 
         lienzo = np.zeros((h + 100, w + 450, 3), dtype=np.uint8)
         panel_sup = crear_panel_superior(w + 450, 100, logo_img)
         lienzo[0:100, 0:w+450] = panel_sup
         detector.draw_all_landmarks(frame, results_pose, results_hands)
-        if modo_actual == config.MODO_CONFIGURACION:
-            dibujar_zona_calibracion(frame, w, h)
         lienzo[100:100+h, 0:w] = frame
         
-        panel_lat = crear_panel_lateral(450, h, angulos_finales, mano_estable, conexion_brazo, modo_actual, servo_en_prueba, tiempo_restante_calibracion, postura_activa)
+        panel_lat = crear_panel_lateral(450, h, angulos_finales, mano_estable, conexion_brazo, modo_actual, servo_en_prueba, 0, postura_activa, articulacion_seleccionada_idx)
         lienzo[100:100+h, w:w+450] = panel_lat
         cv2.imshow("Control de Brazo Robotico", lienzo)
         
-        key = cv2.waitKey(5) & 0xFF
-        if key == 27: break
+        # ¡CORRECCIÓN! Usamos waitKeyEx para capturar teclas especiales como las flechas.
+        key = cv2.waitKeyEx(5)
 
-        # --- REFACTORIZACIÓN: Lógica de manejo de teclas ---
-        if key in key_actions:
-            modo_actual, postura_activa, msg = key_actions[key]
-            servo_en_prueba = None # Resetea el servo en prueba al cambiar de modo
-            if key == ord(' '):
-                tiempo_inicio_calibracion = 0 # Resetea el tiempo de calibración
-            print(msg)
-        elif key == ord('p'):
-            modo_actual = config.MODO_PAUSA
-            print("Modo cambiado a: PAUSA")
-        elif ord('1') <= key <= ord('7'):
-            servo_map = {'1':'proximidad','2':'hombro','3':'codo','4':'pitch','5':'roll','6':'mano', '7':'all'}
-            servo_en_prueba = servo_map[chr(key)]
-            modo_actual, postura_activa = config.MODO_PRUEBA, None
-            print(f"Modo cambiado a: PRUEBA - Servo: {servo_en_prueba}")
+        if key != -1:
+            if key == 27: break
 
+            if modo_actual == config.MODO_MANUAL:
+                key_str = articulaciones_keys[articulacion_seleccionada_idx]
+                if key == 2490368: # Flecha Arriba
+                    articulacion_seleccionada_idx = (articulacion_seleccionada_idx - 1) % len(articulaciones_keys)
+                elif key == 2621440: # Flecha Abajo
+                    articulacion_seleccionada_idx = (articulacion_seleccionada_idx + 1) % len(articulaciones_keys)
+                elif key == 2424832: # Flecha Izquierda
+                    if key_str == 'mano': manual_angles[key_str] = 0
+                    else: manual_angles[key_str] -= 2
+                elif key == 2555904: # Flecha Derecha
+                    if key_str == 'mano': manual_angles[key_str] = 1
+                    else: manual_angles[key_str] += 2
+            
+            if key in key_actions:
+                modo_actual, postura_activa, msg = key_actions[key]
+                servo_en_prueba = None
+                print(msg)
+            elif key == ord('p'):
+                modo_actual = config.MODO_PAUSA; print("Modo cambiado a: PAUSA")
+            elif key == ord('m'):
+                modo_actual = config.MODO_MANUAL
+                manual_angles = angle_processor.get_current_angles()
+                print("Modo cambiado a: MANUAL")
+            elif ord('1') <= key <= ord('7'):
+                servo_map = {'1':'proximidad','2':'hombro','3':'codo','4':'pitch','5':'roll','6':'mano', '7':'all'}
+                servo_en_prueba = servo_map.get(chr(key))
+                if servo_en_prueba:
+                    modo_actual, postura_activa = config.MODO_PRUEBA, None
+                    print(f"Modo cambiado a: PRUEBA - Servo: {servo_en_prueba}")
 
     cap.release()
-    if sock:
-        sock.close()
+    if sock: sock.close()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":

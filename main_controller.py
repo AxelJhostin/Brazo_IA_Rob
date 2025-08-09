@@ -1,6 +1,6 @@
 # =================================================================
 # PROYECTO: Control de Brazo Robótico con Visión (6 Ejes)
-# VERSIÓN: 1.4.0 - Adaptado para Wi-Fi (UDP)
+# VERSIÓN: 1.5.0 - Añadidos Gestos Predefinidos
 # =================================================================
 
 import cv2
@@ -8,7 +8,7 @@ import numpy as np
 import time
 from collections import deque
 import os
-import socket  # AÑADIDO: Para comunicación por red
+import socket
 
 import config
 import robot_logic
@@ -63,10 +63,15 @@ def main():
         
         if modo_actual == config.MODO_PRUEBA:
             test_key = servo_en_prueba
-            final_raw_angles = {} 
         elif modo_actual == config.MODO_POSTURA and postura_activa:
             final_raw_angles = config.POSTURAS_PREDEFINIDAS[postura_activa]
-        else:
+        elif modo_actual in [config.MODO_GESTO_SI, config.MODO_GESTO_NO]:
+            if results_hands and results_hands.multi_hand_landmarks:
+                hand_lm = results_hands.multi_hand_landmarks[0]
+                final_raw_angles['pinza'] = robot_logic._detectar_pinza(hand_lm)
+                gesture_buffer.append(final_raw_angles['pinza'])
+                final_raw_angles['mano'] = 1 if sum(gesture_buffer) >= config.GESTURE_CONFIRMATION_THRESHOLD else 0
+        else: # MODO_NORMAL o MODO_CONFIGURACION
             final_raw_angles, muneca = robot_logic.get_all_raw_angles(
                 results_pose, results_hands, h, w, calibracion_completada,
                 distancia_referencia, distancia_rotacion_referencia
@@ -95,7 +100,7 @@ def main():
                         tiempo_inicio_calibracion = 0
         
         mano_estable = final_raw_angles.get('mano', 0)
-        angulos_finales = angle_processor.smooth_angles(final_raw_angles, test_servo_key=test_key)
+        angulos_finales = angle_processor.smooth_angles(final_raw_angles, test_servo_key=test_key, modo_actual=modo_actual)
 
         if conexion_brazo and modo_actual != config.MODO_PAUSA:
             angulos_seguros = robot_logic.aplicar_limites_seguros(angulos_finales)
@@ -121,12 +126,16 @@ def main():
         if key == ord(' '):
             modo_actual, postura_activa, servo_en_prueba = config.MODO_CONFIGURACION, None, None
             tiempo_inicio_calibracion = 0; print("Modo cambiado a: CONFIGURACION")
-        elif key == ord('n'):
+        elif key == ord('o'): # CAMBIADO DE 'n' a 'o'
             modo_actual, postura_activa, servo_en_prueba = config.MODO_NORMAL, None, None; print("Modo cambiado a: NORMAL")
         elif key == ord('a'):
             modo_actual, postura_activa, servo_en_prueba = config.MODO_POSTURA, 'saludo', None; print("Activando postura: 'saludo'")
         elif key == ord('p'):
             modo_actual = config.MODO_PAUSA; print("Modo cambiado a: PAUSA")
+        elif key == ord('s'): # NUEVO GESTO
+            modo_actual, postura_activa, servo_en_prueba = config.MODO_GESTO_SI, None, None; print("Activando Gesto: 'SI'")
+        elif key == ord('n'): # NUEVO GESTO
+            modo_actual, postura_activa, servo_en_prueba = config.MODO_GESTO_NO, None, None; print("Activando Gesto: 'NO'")
         elif ord('1') <= key <= ord('7'):
             servo_map = {'1':'proximidad','2':'hombro','3':'codo','4':'pitch','5':'roll','6':'mano', '7':'all'}
             servo_en_prueba = servo_map[chr(key)]

@@ -1,8 +1,8 @@
 # =================================================================
 # MÓDULO: ui_components.py
 # DESCRIPCIÓN: Contiene todas las funciones para dibujar la
-#              interfaz gráfica del controlador del brazo robótico.
-# VERSIÓN: 1.6 - Adaptado para Wi-Fi
+#               interfaz gráfica del controlador del brazo robótico.
+# VERSIÓN: 1.7 - Añadidos indicadores para modos de gestos
 # =================================================================
 
 import numpy as np
@@ -67,6 +67,14 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, mod
         cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (0, 165, 255), -1) # Naranja
         cv2.putText(panel, "MODO PAUSA", (ancho // 2 - 130, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
         cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
+    elif modo_actual == config.MODO_GESTO_SI:
+        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (100, 200, 0), -1)
+        cv2.putText(panel, "MODO GESTO: SI", (ancho // 2 - 160, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
+        cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
+    elif modo_actual == config.MODO_GESTO_NO:
+        cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (0, 100, 200), -1)
+        cv2.putText(panel, "MODO GESTO: NO", (ancho // 2 - 160, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
+        cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
     else: # MODO_NORMAL
         cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (40, 40, 40), -1)
         cv2.putText(panel, "MODO OPERACION", (ancho // 2 - 150, 110), font_modo, 1.1, (0, 255, 0), grosor_modo)
@@ -74,7 +82,7 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, mod
 
     cv2.putText(panel, "ESTADO DE ARTICULACIONES", (ancho // 2 - 200, y_start + 40), font_texto, 0.9, (60, 60, 60), grosor_normal)
     y_start += 80
-    articulaciones = [('proximidad', 'PROXIMIDAD'), ('hombro', 'HOMBRO'), ('codo', 'CODO'), ('pitch', 'MUNECA'), ('roll', 'ROTACION'), ('mano', 'MANO')]
+    articulaciones = [('proximidad', 'BASE'), ('hombro', 'HOMBRO'), ('codo', 'CODO'), ('pitch', 'INCLINACION'), ('roll', 'ROTACION'), ('mano', 'PINZA')]
     
     for i, (key, nombre) in enumerate(articulaciones):
         y_pos = y_start + i * 60
@@ -84,9 +92,14 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, mod
             valor = "-"
         else:
             valor_num = angulos.get(key)
-            valor = "N/A" if valor_num is None else ("CERRADA" if mano_estable else "ABIERTA") if key == 'mano' else str(int(valor_num))
+            if key == 'mano':
+                valor = "CERRADA" if mano_estable else "ABIERTA"
+            elif valor_num is None:
+                valor = "N/A"
+            else:
+                valor = str(int(valor_num))
         cv2.putText(panel, nombre, (80, y_pos + 10), font_texto, 0.9, (0, 0, 0), grosor_normal)
-        cv2.putText(panel, f"{valor}", (280, y_pos + 10), font_valores, 0.9, (0, 0, 0), grosor_valores)
+        cv2.putText(panel, f"{valor}", (300, y_pos + 10), font_valores, 0.9, (0, 0, 0), grosor_valores)
     return panel
 
 def dibujar_zona_calibracion(frame, ancho, alto):

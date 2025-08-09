@@ -1,12 +1,12 @@
 # =================================================================
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
-#              configuración para el proyecto del brazo robótico.
-# VERSIÓN: 1.7 - Adaptado para Wi-Fi (UDP)
+#               configuración para el proyecto del brazo robótico.
+# VERSIÓN: 1.9 - Añadidos modos de gestos
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN POR WI-FI (UDP) ---
-ESP_IP = "192.168.186.208"  # <-- ¡IMPORTANTE! La IP de tu ESP8266
+ESP_IP = "192.168.100.155"  
 ESP_PORT = 4210
 
 # --- PARÁMETROS DE LA CÁMARA Y PROCESAMIENTO ---
@@ -26,6 +26,9 @@ PROXIMITY_FILTER_FACTOR = 0.2
 ROLL_INPUT_RANGE = 0.22
 PITCH_INPUT_RANGE_MIN = -0.08
 PITCH_INPUT_RANGE_MAX = 0.08
+
+ROLL_OUTPUT_MIN_ANGLE = 10
+ROLL_OUTPUT_MAX_ANGLE = 180
 
 DISTANCE_RANGE = 0.3
 
@@ -61,3 +64,5 @@ MODO_CONFIGURACION = 1
 MODO_POSTURA = 2
 MODO_PRUEBA = 3
 MODO_PAUSA = 4
+MODO_GESTO_SI = 5
+MODO_GESTO_NO = 6

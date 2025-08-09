@@ -1,8 +1,8 @@
 # =================================================================
 # MÓDULO: robot_logic.py
 # DESCRIPCIÓN: Contiene toda la lógica de negocio para el control
-#              del brazo: detección de pose, cálculo de ángulos y gestos.
-# VERSIÓN: 1.6 - Corregido Movimiento de Muñeca (Pitch) (26/07/2024)
+#               del brazo: detección de pose, cálculo de ángulos y gestos.
+# VERSIÓN: 1.8 - Añadida lógica para gestos 'si' y 'no'
 # =================================================================
 
 import mediapipe as mp
@@ -24,7 +24,7 @@ def get_all_raw_angles(pose_results, hand_results, h, w, calibracion_completada,
         if hand_results and hand_results.multi_hand_landmarks:
             hand_lm = hand_results.multi_hand_landmarks[0]
             gestos = _calcular_gestos_mano(hand_lm, dist_rot_ref)
-            raw_angles.update({'pitch': gestos['pitch'], 'roll': gestos['roll_raw'], 'pinza': gestos['pinza']})
+            raw_angles.update({'pitch': gestos['pitch'], 'roll_raw': gestos['roll_raw'], 'pinza': gestos['pinza']})
 
             if calibracion_completada:
                 distancia_mano_actual = _calcular_distancia_mano(hand_lm)
@@ -40,9 +40,10 @@ class AngleProcessor:
             'pitch': 90.0, 'roll': 90.0
         }
 
-    def smooth_angles(self, raw_angles, test_servo_key=None):
-        target_angles = raw_angles
-        if test_servo_key:
+    def smooth_angles(self, raw_angles, test_servo_key=None, modo_actual=config.MODO_NORMAL):
+        target_angles = {}
+
+        if modo_actual == config.MODO_PRUEBA:
             target_angles = {}
             if test_servo_key == 'all':
                 speed = config.TEST_ALL_SERVOS_SPEED
@@ -57,6 +58,20 @@ class AngleProcessor:
                 for key in self.smoothed_angles.keys():
                     target_angles[key] = sweep_angle if key == test_servo_key else 90
                 target_angles['mano'] = 1 if sweep_angle > 90 else 0 if test_servo_key == 'mano' else raw_angles.get('mano', 0)
+        
+        elif modo_actual == config.MODO_GESTO_SI:
+            target_angles = self.smoothed_angles.copy()
+            target_angles['codo'] = 20  # Límite seguro inferior del codo
+            target_angles['pitch'] = np.interp(math.sin(time.time() * 6), [-1, 1], [45, 135])
+            target_angles['mano'] = raw_angles.get('mano', 0)
+        
+        elif modo_actual == config.MODO_GESTO_NO:
+            target_angles = self.smoothed_angles.copy()
+            target_angles['roll'] = np.interp(math.sin(time.time() * 6), [-1, 1], [45, 135])
+            target_angles['mano'] = raw_angles.get('mano', 0)
+
+        else:
+            target_angles = raw_angles
         
         smoothed_output = {}
         for key, raw_value in target_angles.items():

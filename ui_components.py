@@ -86,13 +86,14 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, mod
     
     articulaciones = [('proximidad', 'BASE'), ('hombro', 'HOMBRO'), ('codo', 'CODO'), 
                       ('pitch', 'INCLINACION'), ('roll', 'ROTACION')]
-
+    color_barra_azul = (255,191,0) # Azul claro en formato BGR
+    
     for i, (key, nombre) in enumerate(articulaciones):
         y_pos = y_start + i * 65
         valor = angulos.get(key, 90)
         color = config.COLORES.get(key, (0, 0, 0))
         seleccionado = (modo_actual == config.MODO_MANUAL and i == articulacion_seleccionada_idx)
-        _dibujar_barra_angulo(panel, y_pos, nombre, valor, color, seleccionado)
+        _dibujar_barra_angulo(panel, y_pos, nombre, valor, color_barra_azul, seleccionado)
 
     y_pinza = y_start + len(articulaciones) * 65
     seleccionado_pinza = (modo_actual == config.MODO_MANUAL and articulacion_seleccionada_idx == len(articulaciones))

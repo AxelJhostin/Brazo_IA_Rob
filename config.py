@@ -2,7 +2,7 @@
 # MÓDULO: config.py
 # DESCRIPCIÓN: Contiene todas las constantes y parámetros de
 #               configuración para el proyecto del brazo robótico.
-# VERSIÓN: 2.1 - Añadido MODO_MANUAL
+# VERSIÓN: 2.2 - Ajustada la sensibilidad del Pitch
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN POR WI-FI (UDP) ---
@@ -24,8 +24,10 @@ ANGLE_SMOOTHING_FACTOR = 0.1
 PROXIMITY_FILTER_FACTOR = 0.2 
 
 ROLL_INPUT_RANGE = 0.22
-PITCH_INPUT_RANGE_MIN = -0.08
-PITCH_INPUT_RANGE_MAX = 0.08
+
+# ¡CORRECCIÓN! Aumentamos el rango para un control más suave del pitch.
+PITCH_INPUT_RANGE_MIN = -0.12 
+PITCH_INPUT_RANGE_MAX = 0.12
 
 ROLL_OUTPUT_MIN_ANGLE = 10
 ROLL_OUTPUT_MAX_ANGLE = 180
@@ -39,9 +41,10 @@ TEST_SWEEP_SPEED = 1.5
 TEST_ALL_SERVOS_SPEED = 1.0
 
 # --- LÍMITES DE SEGURIDAD DE LOS SERVOS (Grados) ---
+# ¡CORRECCIÓN! Ajustamos el rango del pitch para un movimiento más estable.
 ANGULOS_SEGUROS = {
     'proximidad': (0, 180), 'hombro': (30, 160), 'codo': (20, 170),
-    'pitch': (0, 180), 'roll': (10, 180)
+    'pitch': (30, 150), 'roll': (10, 180)
 }
 
 # --- POSTURAS PREDEFINIDAS ---
@@ -70,4 +73,4 @@ MODO_PRUEBA = 3
 MODO_PAUSA = 4
 MODO_GESTO_SI = 5
 MODO_GESTO_NO = 6
-MODO_MANUAL = 7 
+MODO_MANUAL = 7

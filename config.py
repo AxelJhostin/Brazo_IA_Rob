@@ -49,7 +49,11 @@ POSTURAS_PREDEFINIDAS = {
     'saludo': {
         'proximidad': 90, 'hombro': 120, 'codo': 90,
         'pitch': 90, 'roll': 90, 'mano': 0
-    }
+    },
+    'home': {
+        'proximidad': 90, 'hombro': 90, 'codo': 90,
+        'pitch': 90, 'roll': 90, 'mano': 0
+    },
 }
 
 # --- PARÁMETROS DE LA INTERFAZ GRÁFICA ---

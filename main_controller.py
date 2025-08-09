@@ -130,6 +130,8 @@ def main():
             modo_actual, postura_activa, servo_en_prueba = config.MODO_NORMAL, None, None; print("Modo cambiado a: NORMAL")
         elif key == ord('a'):
             modo_actual, postura_activa, servo_en_prueba = config.MODO_POSTURA, 'saludo', None; print("Activando postura: 'saludo'")
+        elif key == ord('z'):
+            modo_actual, postura_activa, servo_en_prueba = config.MODO_POSTURA, 'home', None; print("Activando postura: 'home'")
         elif key == ord('p'):
             modo_actual = config.MODO_PAUSA; print("Modo cambiado a: PAUSA")
         elif key == ord('s'): # NUEVO GESTO

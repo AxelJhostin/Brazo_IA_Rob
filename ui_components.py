@@ -2,7 +2,7 @@
 # MÓDULO: ui_components.py
 # DESCRIPCIÓN: Contiene todas las funciones para dibujar la
 #               interfaz gráfica del controlador del brazo robótico.
-# VERSIÓN: 1.7 - Añadidos indicadores para modos de gestos
+# VERSIÓN: 1.8 - Muestra la postura activa en la GUI
 # =================================================================
 
 import numpy as np
@@ -30,7 +30,7 @@ def crear_panel_superior(ancho_total, alto=90, logo_img=None):
         except Exception as e: print(f"Error dibujando logo: {str(e)}")
     return panel
 
-def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, modo_actual, servo_en_prueba=None, tiempo_restante=0):
+def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, modo_actual, servo_en_prueba=None, tiempo_restante=0, postura_activa=None):
     panel = np.ones((alto, ancho, 3), dtype=np.uint8) * 255
     font_modo, font_texto, font_valores = cv2.FONT_HERSHEY_DUPLEX, cv2.FONT_HERSHEY_SIMPLEX, cv2.FONT_HERSHEY_SIMPLEX
     grosor_normal, grosor_modo, grosor_valores = 2, 2, 2
@@ -54,7 +54,11 @@ def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, mod
     elif modo_actual == config.MODO_POSTURA:
         cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (128, 0, 128), -1)
         cv2.putText(panel, "MODO POSTURA", (ancho // 2 - 150, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
-        cv2.line(panel, (25, 140), (ancho - 25, 140), (200, 200, 200), 2)
+        # ¡MEJORA! Muestra qué postura está activa.
+        if postura_activa:
+            cv2.putText(panel, f"Activa: {postura_activa.upper()}", (ancho // 2 - 100, 170), font_texto, 0.9, (0,0,0), grosor_normal)
+        cv2.line(panel, (25, 190), (ancho - 25, 190), (200, 200, 200), 2)
+        y_start = 220
     elif modo_actual == config.MODO_PRUEBA:
         cv2.rectangle(panel, (20, 70), (ancho - 20, 130), (200, 100, 0), -1)
         cv2.putText(panel, "MODO PRUEBA", (ancho // 2 - 140, 110), font_modo, 1.1, (255, 255, 255), grosor_modo)
@@ -110,3 +114,4 @@ def dibujar_zona_calibracion(frame, ancho, alto):
     cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
     cv2.putText(frame, "ZONA DE CALIBRACION", (ancho // 2 - 220, start_y - 30), cv2.FONT_HERSHEY_DUPLEX, 1.1, (0, 0, 0), 3)
     cv2.putText(frame, "Mantenga el brazo recto aqui", (ancho // 2 - 220, start_y + 40), cv2.FONT_HERSHEY_COMPLEX, 0.9, (0, 0, 0), 2)
+    cv2.putText(frame, "para calibrar la distancia", (ancho // 2 - 200, start_y + 80), cv2.FONT_HERSHEY_COMPLEX, 0.9, (0, 0, 0), 2)

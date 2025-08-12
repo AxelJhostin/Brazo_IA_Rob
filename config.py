@@ -6,7 +6,7 @@
 # =================================================================
 
 # --- CONFIGURACIÓN DE COMUNICACIÓN POR WI-FI (UDP) ---
-ESP_IP = "192.168.100.155"  
+ESP_IP = "172.20.10.3"  
 ESP_PORT = 4210
 
 # --- PARÁMETROS DE LA CÁMARA Y PROCESAMIENTO ---

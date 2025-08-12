@@ -72,7 +72,7 @@ class AngleProcessor:
         
         elif modo_actual == config.MODO_GESTO_SI:
             target_angles = self.smoothed_angles.copy()
-            target_angles['codo'] = 20
+            target_angles['codo'] = 135
             target_angles['pitch'] = np.interp(math.sin(time.time() * 6), [-1, 1], [45, 135])
             target_angles['mano'] = raw_angles.get('mano', 0)
         

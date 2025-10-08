@@ -1,5 +1,3 @@
-//codigo que se utiliza para el brazo robótico con wi-fi
-// Este código es para el ESP8266 y utiliza la librería Servo para controlar los serv
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <Servo.h>
@@ -9,8 +7,8 @@
 // =================================================================
 
 // 1. Introduce los datos de tu red Wi-Fi
-const char* ssid = "GABIOTA visualnet";
-const char* password = "Paloma0320";
+const char* ssid = "iPhone (3)";
+const char* password = "manolo1234";
 
 // 2. Pines para los 6 servos (los que ya probaste)
 // ¡CORRECCIÓN FINAL! Se han intercambiado los pines de la muñeca (Pitch y Roll).

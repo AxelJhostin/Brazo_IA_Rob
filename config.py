@@ -44,25 +44,34 @@ TEST_ALL_SERVOS_SPEED = 1.0
 # ¡CORRECCIÓN! Ajustamos el rango del pitch para un movimiento más estable.
 ANGULOS_SEGUROS = {
     'proximidad': (0, 180), 'hombro': (30, 160), 'codo': (20, 170),
-    'pitch': (30, 150), 'roll': (10, 180)
+    'pitch': (30, 150), 'roll': (10, 180),
+    'pulgar': (0, 180),
+    'indice': (0, 180),
+    'medio': (0, 180),
+    'anular': (0, 180),
+    'menique': (0, 180)
 }
 
 # --- POSTURAS PREDEFINIDAS ---
 POSTURAS_PREDEFINIDAS = {
     'saludo': {
         'proximidad': 90, 'hombro': 120, 'codo': 90,
-        'pitch': 90, 'roll': 90, 'mano': 0
+        'pitch': 90, 'roll': 90, 'pulgar': 0, 'indice': 0,
+        'medio': 0, 'anular': 0, 'menique': 0
     },
     'home': {
         'proximidad': 90, 'hombro': 90, 'codo': 90,
-        'pitch': 90, 'roll': 90, 'mano': 0
+        'pitch': 90, 'roll': 90, 'pulgar': 0, 'indice': 0,
+        'medio': 0, 'anular': 0, 'menique': 0
     }
 }
 
 # --- PARÁMETROS DE LA INTERFAZ GRÁFICA ---
 COLORES = {
     'proximidad': (0, 0, 255), 'hombro': (255, 255, 0), 'codo': (0, 165, 255),
-    'pitch': (0, 0, 255), 'roll': (150, 50, 200), 'mano': (50, 50, 50)
+    'pitch': (0, 0, 255), 'roll': (150, 50, 200), 'pulgar': (255, 0, 0),
+    'indice': (0, 255, 0), 'medio': (255, 165, 0), 'anular': (255, 0, 255),
+    'menique': (0, 255, 255)
 }
 
 # --- ESTADOS DEL PROGRAMA (Para claridad) ---

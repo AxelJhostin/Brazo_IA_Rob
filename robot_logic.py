@@ -50,7 +50,7 @@ class AngleProcessor:
         """Devuelve una copia de los ángulos actuales, ideal para iniciar el modo manual."""
         return {key: int(value) for key, value in self.smoothed_angles.items()}
 
-    def smooth_angles(self, raw_angles, test_servo_key=None, modo_actual=config.MODO_NORMAL):
+    def smooth_angles(self, raw_angles, hand_results=None, test_servo_key=None, modo_actual=config.MODO_NORMAL):
         target_angles = {}
 
         if modo_actual == config.MODO_MANUAL:
@@ -78,13 +78,17 @@ class AngleProcessor:
             target_angles['codo'] = 135
             target_angles['pitch'] = np.interp(math.sin(time.time() * 6), [-1, 1], [45, 135])
             # Actualizamos los dedos con los valores actuales de la visión
-            target_angles.update(_calcular_angulos_dedos(raw_angles))
+            if hand_results and hand_results.multi_hand_landmarks:
+                dedos_actuales = _calcular_angulos_dedos(hand_results.multi_hand_landmarks[0])
+                target_angles.update(dedos_actuales)
 
         elif modo_actual == config.MODO_GESTO_NO:
             target_angles = self.smoothed_angles.copy()
             target_angles['roll'] = np.interp(math.sin(time.time() * 6), [-1, 1], [45, 135])
             # Actualizamos los dedos con los valores actuales de la visión
-            target_angles.update(_calcular_angulos_dedos(raw_angles))
+            if hand_results and hand_results.multi_hand_landmarks:
+                dedos_actuales = _calcular_angulos_dedos(hand_results.multi_hand_landmarks[0])
+                target_angles.update(dedos_actuales)
 
         else:
             target_angles = raw_angles

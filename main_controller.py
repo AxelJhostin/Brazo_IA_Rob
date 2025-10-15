@@ -84,7 +84,7 @@ def main():
             )
         
         # Procesado y suavizado de ángulos
-        angulos_finales = angle_processor.smooth_angles(final_raw_angles, test_servo_key=test_key, modo_actual=modo_actual)
+        angulos_finales = angle_processor.smooth_angles(final_raw_angles, hand_results=results_hands, test_servo_key=test_key, modo_actual=modo_actual)
         
         if modo_actual == config.MODO_MANUAL:
             manual_angles = angulos_finales.copy()

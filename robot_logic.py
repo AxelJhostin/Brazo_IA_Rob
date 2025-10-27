@@ -188,7 +188,7 @@ def _calcular_angulos_dedos(hand_landmarks):
         distancia = math.sqrt((punto_punta.x - punto_base.x)**2 + (punto_punta.y - punto_base.y)**2)
         
         rango = rangos_distancia[dedo]
-        angulo = np.interp(distancia, [rango['min'], rango['max']], [rango['ang_max'], rango['ang_min']])
+        angulo = np.interp(distancia, [rango['min'], rango['max']], [rango['ang_min'], rango['ang_max']])
         
         dedos[dedo] = max(0, min(180, int(angulo)))
         

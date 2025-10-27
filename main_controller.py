@@ -115,7 +115,7 @@ def main():
         lienzo[100:100+h, 0:w] = frame
         
         # CORRECCIÓN: Se elimina 'mano_estable' de la llamada
-        panel_lat = crear_panel_lateral(450, h, angulos_finales, None, conexion_brazo, modo_actual, servo_en_prueba, 0, postura_activa, articulacion_seleccionada_idx)
+        panel_lat = crear_panel_lateral(450, h, angulos_finales, conexion_brazo, modo_actual, servo_en_prueba, 0, postura_activa, articulacion_seleccionada_idx)
         lienzo[100:100+h, w:w+450] = panel_lat
         cv2.imshow("Control de Brazo Robotico", lienzo)
         

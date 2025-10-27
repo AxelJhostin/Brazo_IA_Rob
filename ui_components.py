@@ -77,9 +77,9 @@ def crear_panel_superior(ancho_total, alto=90, logo_img=None):
     return panel
 
 
-def crear_panel_lateral(ancho, alto, angulos, mano_estable, conexion_activa, modo_actual,
-                        servo_en_prueba=None, tiempo_restante=0, postura_activa=None,
-                        articulacion_seleccionada_idx=-1):
+def crear_panel_lateral(ancho, alto, angulos, conexion_activa, modo_actual,
+    servo_en_prueba=None, tiempo_restante=0, postura_activa=None,
+    articulacion_seleccionada_idx=-1):
     """Crea el panel lateral con un diseño más limpio y moderno."""
     panel = np.ones((alto, ancho, 3), dtype=np.uint8) * 250
     font_texto = cv2.FONT_HERSHEY_SIMPLEX

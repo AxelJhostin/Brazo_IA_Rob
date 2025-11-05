@@ -5,9 +5,8 @@
 # VERSIÓN: 2.2 - Ajustada la sensibilidad del Pitch
 # =================================================================
 
-# --- CONFIGURACIÓN DE COMUNICACIÓN POR WI-FI (UDP) ---
-ESP_IP = "192.168.186.208"  
-ESP_PORT = 4210
+# --- CONFIGURACIÓN DE COMUNICACIÓN SERIAL (USB) ---
+SERIAL_BAUDRATE = 115200  # Debe coincidir con Serial.begin(115200)
 
 # --- PARÁMETROS DE LA CÁMARA Y PROCESAMIENTO ---
 CAMERA_INDEX = 0

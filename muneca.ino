@@ -45,7 +45,7 @@ void setup() {
   Serial.println("Prueba de Gestos de la Mano - Iniciando...");
 
   // Inicia I2C en los pines D2 (SDA) y D1 (SCL) del ESP8266
-  Wire.begin(D2, D1); 
+  Wire.begin(4, 5); // Usamos GPIO 4 (D2) para SDA y GPIO 5 (D1) para SCL
   
   pwm.begin();
   pwm.setPWMFreq(50); // Frecuencia estándar para servos

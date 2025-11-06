@@ -1,6 +1,7 @@
 /*
  * CÓDIGO 1: PRUEBA DE GESTOS DE LA MANO (5 DEDOS)
- * Controla solo los servos de los dedos.
+ * VERSIÓN CORREGIDA (SECUENCIAL)
+ * Mueve los dedos uno por uno para evitar picos de corriente.
  * Mapeo de pines basado en tu PCB.
  */
 
@@ -26,6 +27,9 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define ABIERTO 180
 #define CERRADO 0
 
+// Pausa corta entre movimientos de dedos (en milisegundos)
+#define PAUSA_DEDO 50 
+
 /**
  * @brief Convierte grados (0-180) a pulsos PWM (SERVOMIN-SERVOMAX)
  */
@@ -42,58 +46,106 @@ void moverDedo(int pinDedo, int angulo) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Prueba de Gestos de la Mano - Iniciando...");
+  Serial.println("Prueba de Gestos de la Mano (Segura) - Iniciando...");
 
   // Inicia I2C en los pines D2 (SDA) y D1 (SCL) del ESP8266
-  Wire.begin(4, 5); // Usamos GPIO 4 (D2) para SDA y GPIO 5 (D1) para SCL
+  // Usamos GPIO 4 (D2) y GPIO 5 (D1)
+  Wire.begin(4, 5); 
   
   pwm.begin();
   pwm.setPWMFreq(50); // Frecuencia estándar para servos
   
   Serial.println("Mano centrada. Iniciando secuencia...");
-  // Posición inicial (medio abiertos)
+  // Posición inicial (medio abiertos) - ¡AHORA SECUENCIAL!
   moverDedo(PIN_PULGAR, 90);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_INDICE, 90);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_MEDIO, 90);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_ANULAR, 90);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_MEÑIQUE, 90);
   delay(1000);
 }
 
 
 void loop() {
-  // --- 1. SALUDO (ABRIR Y CERRAR) ---
+  // --- 1. SALUDO (ABRIR) ---
   Serial.println("Gesto: SALUDO (Mano Abierta)");
   moverDedo(PIN_PULGAR, ABIERTO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_INDICE, ABIERTO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_MEDIO, ABIERTO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_ANULAR, ABIERTO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_MEÑIQUE, ABIERTO);
-  delay(2000);
+  delay(2000); // Pausa larga para ver el gesto
 
+  // --- 2. PUÑO (CERRAR) ---
   Serial.println("Gesto: PUÑO (Mano Cerrada)");
   moverDedo(PIN_PULGAR, CERRADO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_INDICE, CERRADO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_MEDIO, CERRADO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_ANULAR, CERRADO);
+  delay(PAUSA_DEDO);
   moverDedo(PIN_MEÑIQUE, CERRADO);
   delay(2000);
 
-  // --- 2. GESTO DE ROCK ---
+  // --- 3. GESTO DE ROCK ---
   Serial.println("Gesto: ROCK 🤘");
-  moverDedo(PIN_PULGAR, CERRADO);     // Pulgar cerrado
-  moverDedo(PIN_INDICE, ABIERTO);     // Índice abierto
-  moverDedo(PIN_MEDIO, CERRADO);     // Medio cerrado
-  moverDedo(PIN_ANULAR, CERRADO);     // Anular cerrado
-  moverDedo(PIN_MEÑIQUE, ABIERTO);    // Meñique abierto
+  moverDedo(PIN_PULGAR, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_INDICE, ABIERTO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEDIO, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_ANULAR, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEÑIQUE, ABIERTO);
   delay(3000);
 
-  // --- 3. GESTO de PAZ / V ---
+  // --- 4. GESTO de PAZ / V ---
   Serial.println("Gesto: PAZ ✌️");
-  moverDedo(PIN_PULGAR, CERRADO);     // Pulgar cerrado
-  moverDedo(PIN_INDICE, ABIERTO);     // Índice abierto
-  moverDedo(PIN_MEDIO, ABIERTO);     // Medio abierto
-  moverDedo(PIN_ANULAR, CERRADO);     // Anular cerrado
-  moverDedo(PIN_MEÑIQUE, CERRADO);    // Meñique cerrado
+  moverDedo(PIN_PULGAR, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_INDICE, ABIERTO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEDIO, ABIERTO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_ANULAR, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEÑIQUE, CERRADO);
+  delay(3000);
+
+  // --- 5. ¡NUEVO! GESTO DE OK ---
+  Serial.println("Gesto: OK 👌");
+  moverDedo(PIN_PULGAR, CERRADO); // O puedes probar 90
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_INDICE, CERRADO); // O puedes probar 90
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEDIO, ABIERTO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_ANULAR, ABIERTO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEÑIQUE, ABIERTO);
+  delay(3000);
+
+  // --- 6. ¡NUEVO! GESTO DE PULGAR ARRIBA ---
+  Serial.println("Gesto: PULGAR ARRIBA 👍");
+  moverDedo(PIN_PULGAR, ABIERTO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_INDICE, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEDIO, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_ANULAR, CERRADO);
+  delay(PAUSA_DEDO);
+  moverDedo(PIN_MEÑIQUE, CERRADO);
   delay(3000);
 }

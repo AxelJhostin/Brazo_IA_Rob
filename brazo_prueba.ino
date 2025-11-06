@@ -1,7 +1,8 @@
 /*
  * CÓDIGO 2: PRUEBA DE MOVIMIENTO DEL BRAZO (5 EJES)
+ * VERSIÓN CORREGIDA (SECUENCIAL)
  * Controla solo los servos de la base, hombro, codo, pitch y roll.
- * Mapeo de pines basado en tu PCB.
+ * Mueve los servos uno por uno para evitar picos de corriente.
  */
 
 #include <Wire.h>
@@ -15,7 +16,6 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define SERVOMAX  600
 
 // --- Mapeo de Pines Físicos para el BRAZO ---
-// (Basado en nuestra conversación anterior)
 #define PIN_BASE      9  // Proximidad
 #define PIN_HOMBRO    15
 #define PIN_CODO      14
@@ -23,7 +23,6 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define PIN_ROLL      11 // Rotación
 
 // --- Límites Seguros (Basados en tu config.py) ---
-// Para evitar que los servos choquen
 #define BASE_MIN    30
 #define BASE_MAX    150
 #define HOMBRO_MIN  30
@@ -51,16 +50,24 @@ void moverServo(int pinServo, int angulo) {
 }
 
 /**
- * @brief Pone todos los servos del brazo en posición "home" (90 grados)
+ * @brief Pone todos los servos del brazo en "home" (90)
+ * ¡VERSIÓN CORREGIDA! Mueve los servos secuencialmente.
  */
 void posicionHome() {
-  Serial.println("Moviendo a HOME (90 grados)...");
+  Serial.println("Moviendo a HOME (90 grados) secuencialmente...");
+  
+  // Mueve un servo a la vez con una pequeña pausa
   moverServo(PIN_BASE, 90);
+  delay(50); // Pausa corta
   moverServo(PIN_HOMBRO, 90);
+  delay(50); // Pausa corta
   moverServo(PIN_CODO, 90);
+  delay(50); // Pausa corta
   moverServo(PIN_PITCH, 90);
+  delay(50); // Pausa corta
   moverServo(PIN_ROLL, 90);
-  delay(1000); // Espera a que lleguen
+  
+  delay(1000); // Espera a que todos lleguen
 }
 
 /**
@@ -92,15 +99,15 @@ void probarServo(int pinServo, int minAng, int maxAng) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Prueba de Movimiento del Brazo - Iniciando...");
+  Serial.println("Prueba de Movimiento del Brazo (Seguro) - Iniciando...");
 
   // Inicia I2C en los pines D2 (SDA) y D1 (SCL) del ESP8266
-  Wire.begin(D2, D1); 
+  Wire.begin(4, 5); // Usando GPIO 4 (D2) y GPIO 5 (D1)
   
   pwm.begin();
   pwm.setPWMFreq(50); // Frecuencia estándar para servos
   
-  posicionHome();
+  posicionHome(); // Llama a la nueva función 'Home' secuencial
   Serial.println("Inicio de secuencia de prueba.");
 }
 
@@ -127,6 +134,6 @@ void loop() {
   delay(1000);
 
   Serial.println("Secuencia completada. Reiniciando en 5 segundos...");
-  posicionHome();
+  posicionHome(); // Llama a la función 'Home' secuencial de nuevo
   delay(5000);
 }

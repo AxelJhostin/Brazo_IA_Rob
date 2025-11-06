@@ -32,7 +32,18 @@ El orden DEBE coincidir con el que envía Python:
 [9] = meñique
 */
 // Edita los números de abajo (0-15) según los pines de tu PCA9685
-int canalesServos[NUM_SERVOS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+int canalesServos[NUM_SERVOS] = {
+    /* (0) proximidad */  9,  // Base
+    /* (1) hombro */      15,
+    /* (2) codo */        14,
+    /* (3) pitch */       13, // "Otro codo"
+    /* (4) roll */        11, // Rotación
+    /* (5) pulgar */      10, // ¡ASIGNADO! Estaba entre 9 y 11
+    /* (6) indice */      3,
+    /* (7) medio */       2,
+    /* (8) anular */      1,
+    /* (9) meñique */     0
+};
 
 
 // --- FIN DE CONFIGURACIÓN ---

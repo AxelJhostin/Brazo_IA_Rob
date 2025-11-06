@@ -1,86 +1,123 @@
-#include <ESP8266WiFi.h>
-#include <WiFiUdp.h>
-#include <Servo.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 
-// =================================================================
-// CÓDIGO DEFINITIVO CON WI-FI (UDP)
-// =================================================================
+// Crea el objeto para controlar el HW-170 (PCA9685)
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
-// 1. Introduce los datos de tu red Wi-Fi
-const char* ssid = "iPhone (3)";
-const char* password = "manolo1234";
+// Límites de pulso para tus servos (ajusta si los tuyos son diferentes)
+#define SERVOMIN  150 // Pulso mínimo (~0 grados)
+#define SERVOMAX  600 // Pulso máximo (~180 grados)
 
-// 2. Pines para los 6 servos (los que ya probaste)
-// ¡CORRECCIÓN FINAL! Se han intercambiado los pines de la muñeca (Pitch y Roll).
-#define PIN_SERVO_1 5  // Base (D1)
-#define PIN_SERVO_2 12 // Hombro (D6)
-#define PIN_SERVO_3 0  // Codo (D3)
-#define PIN_SERVO_4 14 // Muñeca Pitch (D5) <-- ANTES ERA 2
-#define PIN_SERVO_5 2  // Muñeca Roll (D4)  <-- ANTES ERA 14
-#define PIN_SERVO_6 4  // Pinza (D2)
+// --- CONFIGURACIÓN DE SERVOS ---
 
-// 3. Puerto en el que el ESP8266 escuchará los datos
-unsigned int puerto_udp = 4210;
+// Tu script de Python envía 10 valores
+const int NUM_SERVOS = 10;
 
-// =================================================================
+// Array para guardar los ángulos recibidos
+int angulos[NUM_SERVOS];
 
-WiFiUDP udp;
-Servo servo1, servo2, servo3, servo4, servo5, servo6;
-char buffer_paquete[255]; 
+/*
+¡¡¡RECORDATORIO CRUCIAL!!!
+Asegúrate de que este array coincida con tu cableado físico.
+El orden DEBE coincidir con el que envía Python:
+[0] = proximidad (Base)
+[1] = hombro
+[2] = codo
+[3] = pitch (Inclinación)
+[4] = roll (Rotación)
+[5] = pulgar
+[6] = indice
+[7] = medio
+[8] = anular
+[9] = meñique
+*/
+// Edita los números de abajo (0-15) según los pines de tu PCA9685
+int canalesServos[NUM_SERVOS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 
-void setup() {
-  Serial.begin(115200);
-  Serial.println("\nIniciando Brazo Robótico (Modo Wi-Fi)...");
 
-  // --- Conexión a la red Wi-Fi ---
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando a WiFi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\n¡Conexión exitosa!");
-  Serial.print("Dirección IP del brazo: ");
-  Serial.println(WiFi.localIP());
+// --- FIN DE CONFIGURACIÓN ---
 
-  // --- Inicialización de Servos ---
-  servo1.attach(PIN_SERVO_1);
-  servo2.attach(PIN_SERVO_2);
-  servo3.attach(PIN_SERVO_3);
-  servo4.attach(PIN_SERVO_4);
-  servo5.attach(PIN_SERVO_5);
-  servo6.attach(PIN_SERVO_6);
-  
-  // --- Iniciar la escucha UDP ---
-  udp.begin(puerto_udp);
-  Serial.printf("Escuchando datos en el puerto UDP %d\n", puerto_udp);
+
+/**
+ * @brief Convierte grados (0-180) a pulsos PWM (SERVOMIN-SERVOMAX)
+ */
+int gradosAPulso(int angulo) {
+  // Mapea el ángulo de 0-180 a los límites de pulso
+  return map(angulo, 0, 180, SERVOMIN, SERVOMAX);
 }
 
+void setup() {
+  // Inicia la comunicación serial. Debe ser 115200.
+  Serial.begin(115200);
+  Serial.println("Control de Servos por Serial - Listo.");
+
+  pwm.begin();
+  pwm.setPWMFreq(50); // Frecuencia estándar de 50 Hz para servos
+
+  // Centra todos los servos a 90 grados al iniciar
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    angulos[i] = 90; // Guarda el estado inicial
+    pwm.setPWM(canalesServos[i], 0, gradosAPulso(90));
+  }
+}
+
+/**
+ * @brief Mueve todos los servos a las posiciones guardadas en el array 'angulos'
+ */
+void moverServos() {
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    int pulso = gradosAPulso(angulos[i]);
+    pwm.setPWM(canalesServos[i], 0, pulso);
+  }
+}
+
+/**
+ * @brief Analiza la cadena de datos (ej: "90,80,70...") y actualiza el array 'angulos'
+ */
+void procesarDatos(String data) {
+  int angleIndex = 0;
+
+  while (data.length() > 0 && angleIndex < NUM_SERVOS) {
+    int comaIndex = data.indexOf(','); // Busca la siguiente coma
+
+    String valorStr;
+    if (comaIndex == -1) {
+      // No hay más comas, es el último valor
+      valorStr = data;
+      data = ""; // Limpiar la cadena para salir del bucle
+    } else {
+      // Extraer el valor antes de la coma
+      valorStr = data.substring(0, comaIndex);
+      // Quitar este valor y la coma de la cadena
+      data = data.substring(comaIndex + 1);
+    }
+
+    // Convertir el valor a entero y guardarlo
+    angulos[angleIndex] = valorStr.toInt();
+    angleIndex++;
+  }
+}
+
+/**
+ * @brief Bucle principal: Escucha datos seriales
+ */
 void loop() {
-  // 1. Revisa si ha llegado un paquete de datos UDP
-  int tamano_paquete = udp.parsePacket();
+  // 1. Revisa si hay datos disponibles
+  if (Serial.available() > 0) {
+    
+    // 2. Lee el primer caracter, buscando el inicio '<'
+    char startChar = Serial.read();
+    
+    if (startChar == '<') {
+      // 3. Si lo encuentra, lee todo hasta el final '>'
+      String dataString = Serial.readStringUntil('>');
 
-  if (tamano_paquete) {
-    // 2. Lee el paquete y guárdalo en el buffer
-    int len = udp.read(buffer_paquete, 255);
-    if (len > 0) {
-      buffer_paquete[len] = '\0'; 
+      // 4. Procesa la cadena de datos
+      procesarDatos(dataString);
+
+      // 5. Mueve los servos a las nuevas posiciones
+      moverServos();
     }
-
-    // 3. Decodifica el string para extraer los 6 ángulos
-    int ang1, ang2, ang3, ang4, ang5, ang6;
-    int items_leidos = sscanf(buffer_paquete, "<%d,%d,%d,%d,%d,%d>", 
-                              &ang1, &ang2, &ang3, 
-                              &ang4, &ang5, &ang6);
-
-    // 4. Si el formato es correcto (6 valores leídos), mueve los servos
-    if (items_leidos == 6) {
-      servo1.write(ang1); // Base
-      servo2.write(ang2); // Hombro
-      servo3.write(ang3); // Codo
-      servo4.write(ang4); // Muñeca Pitch
-      servo5.write(ang5); // Muñeca Roll
-      servo6.write(ang6 == 1 ? 45 : 0); // Pinza
-    }
+    // Si el caracter no es '<', se ignora y el bucle sigue.
   }
 }

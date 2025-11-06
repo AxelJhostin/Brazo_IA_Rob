@@ -131,6 +131,38 @@ class PoseDetector:
                 connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(180, 180, 180), thickness=2))
 
 # --- FUNCIONES AUXILIARES (PRIVADAS) ---
+
+def _calcular_angulo_3p(p1, p2, p3):
+    """Calcula el ángulo (en grados) en el vértice p2, formado por p1-p2-p3."""
+    # p1, p2, p3 son landmarks de MediaPipe
+    
+    # Obtener coordenadas 2D (es más estable que 3D para esto)
+    a = np.array([p1.x, p1.y])
+    b = np.array([p2.x, p2.y]) # Vértice
+    c = np.array([p3.x, p3.y])
+
+    # Calcular vectores
+    vec1 = a - b
+    vec2 = c - b
+
+    # Calcular el producto punto y las magnitudes
+    dot_prod = np.dot(vec1, vec2)
+    mag1 = np.linalg.norm(vec1)
+    mag2 = np.linalg.norm(vec2)
+
+    if mag1 == 0 or mag2 == 0:
+        return 180.0 # Asumir recto si no hay vector
+
+    # Calcular el coseno del ángulo
+    # Se usa np.clip para evitar errores de redondeo (ej. 1.000001)
+    cosine_angle = np.clip(dot_prod / (mag1 * mag2), -1.0, 1.0)
+
+    # Calcular el ángulo en radianes y luego convertir a grados
+    angle_rad = np.arccos(cosine_angle)
+    angle_deg = np.degrees(angle_rad)
+
+    return angle_deg
+
 def _calcular_proximidad_bruta(distancia_actual, distancia_referencia):
     if distancia_referencia > 0:
         dist_min = distancia_referencia - (distancia_referencia * config.DISTANCE_RANGE)
@@ -148,7 +180,7 @@ def _calcular_angulos_brazo(landmarks, h, w):
     mag_vec = np.linalg.norm(vec_shoulder_elbow)
     ang_hombro = 90
     if mag_vec > 0: 
-        ang_hombro = np.degrees(np.arccos(max(min(np.dot(vec_shoulder_elbow, [0, -1]) / mag_vec, 1), -1)))
+        ang_hombro = 180 - np.degrees(np.arccos(max(min(np.dot(vec_shoulder_elbow, [0, -1]) / mag_vec, 1), -1)))
         
     vec1 = [shoulder[0] - elbow[0], shoulder[1] - elbow[1]]
     vec2 = [wrist[0] - elbow[0], wrist[1] - elbow[1]]
@@ -165,32 +197,72 @@ def _calcular_distancia_mano(hand_landmarks, punto1=5, punto2=17):
     return math.sqrt((punto_a.x - punto_b.x)**2 + (punto_a.y - punto_b.y)**2)
 
 def _calcular_angulos_dedos(hand_landmarks):
-    """Calcula el ángulo de cada dedo basándose en la distancia de la punta a la muñeca."""
+    """
+    Calcula el ángulo de cada dedo basándose en el ángulo interno
+    de las articulaciones (MCP-PIP-TIP).
+    """
     dedos = {}
-    
-    puntas_dedos_ids = {
-        'pulgar': 4, 'indice': 8, 'medio': 12, 'anular': 16, 'menique': 20
-    }
-    
-    punto_base = hand_landmarks.landmark[0]
+    lm = hand_landmarks.landmark
 
-    # --- ¡IMPORTANTE! DEBES AJUSTAR ESTOS VALORES PARA TU MANO ---
-    rangos_distancia = {
-        'pulgar':  {'min': 0.05, 'max': 0.15, 'ang_min': 0, 'ang_max': 160},
-        'indice':  {'min': 0.08, 'max': 0.25, 'ang_min': 0, 'ang_max': 180},
-        'medio':   {'min': 0.08, 'max': 0.27, 'ang_min': 0, 'ang_max': 180},
-        'anular':  {'min': 0.08, 'max': 0.25, 'ang_min': 0, 'ang_max': 180},
-        'menique': {'min': 0.08, 'max': 0.22, 'ang_min': 0, 'ang_max': 180},
-    }
+    # --- rangos de Mapeo (Puedes ajustar esto) ---
+    # Rango de ángulo medido (humano) -> Rango de ángulo del servo (robot)
+    # [Doblado, Recto] -> [Servo a 0, Servo a 180]
+    
+    # Para la mayoría de los dedos
+    INPUT_ANGLE_MIN = 80.0  # Ángulo medido (humano) cuando está doblado
+    INPUT_ANGLE_MAX = 170.0 # Ángulo medido (humano) cuando está recto
+    
+    # Para el pulgar (tiene un rango de movimiento diferente)
+    THUMB_INPUT_MIN = 130.0
+    THUMB_INPUT_MAX = 170.0
+    
+    SERVO_ANGLE_MIN = 0     # Ángulo del servo (robot) cuando está doblado
+    SERVO_ANGLE_MAX = 180   # Ángulo del servo (robot) cuando está recto
+    # ------------------------------------------------
 
-    for dedo, punta_id in puntas_dedos_ids.items():
-        punto_punta = hand_landmarks.landmark[punta_id]
-        distancia = math.sqrt((punto_punta.x - punto_base.x)**2 + (punto_punta.y - punto_base.y)**2)
-        
-        rango = rangos_distancia[dedo]
-        angulo = np.interp(distancia, [rango['min'], rango['max']], [rango['ang_min'], rango['ang_max']])
-        
-        dedos[dedo] = max(0, min(180, int(angulo)))
+    # --- Dedo Índice ---
+    # Puntos: A=5 (MCP), B=6 (PIP), C=8 (TIP)
+    try:
+        angulo_indice = _calcular_angulo_3p(lm[5], lm[6], lm[8])
+        dedos['indice'] = np.interp(angulo_indice, [INPUT_ANGLE_MIN, INPUT_ANGLE_MAX], [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+    except Exception as e:
+        dedos['indice'] = 90 # Posición segura en caso de error
+
+    # --- Dedo Medio ---
+    # Puntos: A=9 (MCP), B=10 (PIP), C=12 (TIP)
+    try:
+        angulo_medio = _calcular_angulo_3p(lm[9], lm[10], lm[12])
+        dedos['medio'] = np.interp(angulo_medio, [INPUT_ANGLE_MIN, INPUT_ANGLE_MAX], [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+    except Exception as e:
+        dedos['medio'] = 90
+
+    # --- Dedo Anular ---
+    # Puntos: A=13 (MCP), B=14 (PIP), C=16 (TIP)
+    try:
+        angulo_anular = _calcular_angulo_3p(lm[13], lm[14], lm[16])
+        dedos['anular'] = np.interp(angulo_anular, [INPUT_ANGLE_MIN, INPUT_ANGLE_MAX], [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+    except Exception as e:
+        dedos['anular'] = 90
+
+    # --- Dedo Meñique ---
+    # Puntos: A=17 (MCP), B=18 (PIP), C=20 (TIP)
+    try:
+        angulo_menique = _calcular_angulo_3p(lm[17], lm[18], lm[20])
+        dedos['menique'] = np.interp(angulo_menique, [INPUT_ANGLE_MIN, INPUT_ANGLE_MAX], [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+    except Exception as e:
+        dedos['menique'] = 90
+
+    # --- Pulgar ---
+    # Puntos: A=2 (MCP), B=3 (IP), C=4 (TIP)
+    try:
+        angulo_pulgar = _calcular_angulo_3p(lm[2], lm[3], lm[4])
+        dedos['pulgar'] = np.interp(angulo_pulgar, [THUMB_INPUT_MIN, THUMB_INPUT_MAX], [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+    except Exception as e:
+        dedos['pulgar'] = 90
+
+    # Limpiar y asegurar que los valores estén en el rango 0-180
+    for key in dedos:
+        dedos[key] = max(0, min(180, int(dedos[key])))
         
     return dedos
 

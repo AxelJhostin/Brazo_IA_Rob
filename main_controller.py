@@ -8,11 +8,28 @@ import numpy as np
 import time
 from collections import deque
 import os
-import socket
+import serial            
+import serial.tools.list_ports  
 
 import config
 import robot_logic
 from ui_components import crear_panel_superior, crear_panel_lateral, dibujar_zona_calibracion
+
+def encontrar_puerto_arduino():
+    """Busca y devuelve el puerto serial donde está conectado el Arduino."""
+    print("Buscando Arduino...")
+    puertos = serial.tools.list_ports.comports()
+    for puerto in puertos:
+        # Puedes ajustar esto si tu placa se identifica diferente
+        if "Arduino" in puerto.description or "CH340" in puerto.description:
+            print(f"Arduino encontrado en: {puerto.device}")
+            return puerto.device
+    
+    print("ADVERTENCIA: No se encontró un Arduino automáticamente.")
+    if puertos:
+        print(f"Usando el primer puerto disponible: {puertos[0].device}")
+        return puertos[0].device
+    return None
 
 def main():
     # --- INICIALIZACIÓN ---
@@ -32,12 +49,23 @@ def main():
     cv2.resizeWindow("Control de Brazo Robotico", 1600, 900)
     logo_img = cv2.imread("logo_puce.png") if os.path.exists("logo_puce.png") else None
     
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        conexion_brazo = True
-        print(f"Socket creado. Enviando datos a {config.ESP_IP}:{config.ESP_PORT}")
-    except Exception as e:
-        sock = None; conexion_brazo = False; print(f"Error al crear el socket: {e}")
+    # --- Conexión Serial ---
+    puerto_arduino = encontrar_puerto_arduino()
+    ser = None
+    conexion_brazo = False
+    
+    if puerto_arduino:
+        try:
+            # Conecta con el Arduino
+            ser = serial.Serial(puerto_arduino, config.SERIAL_BAUDRATE, timeout=1)
+            # Espera 2 segundos a que el Arduino se reinicie (importante)
+            time.sleep(2) 
+            conexion_brazo = True
+            print(f"Conectado al Arduino en {puerto_arduino} a {config.SERIAL_BAUDRATE} baudios.")
+        except serial.SerialException as e:
+            print(f"Error al conectar por serial: {e}")
+    else:
+        print("Error: No se encontró ningún puerto serial disponible.")
 
     cap = cv2.VideoCapture(config.CAMERA_INDEX)
     if not cap.isOpened(): print("Error: No se pudo abrir la cámara"); return
@@ -105,7 +133,8 @@ def main():
                      f"{int(angulos_seguros.get('anular', 90))},"
                      f"{int(angulos_seguros.get('menique', 90))}>")
             
-            sock.sendto(datos.encode('utf-8'), (config.ESP_IP, config.ESP_PORT))
+            # ¡CAMBIO CLAVE! Enviar por serial en lugar de socket
+            ser.write(datos.encode('utf-8'))
 
         # Creación de la interfaz gráfica
         lienzo = np.zeros((h + 100, w + 450, 3), dtype=np.uint8)
@@ -157,7 +186,7 @@ def main():
                     print(f"Modo cambiado a: PRUEBA - Servo: {servo_en_prueba}")
 
     cap.release()
-    if sock: sock.close()
+    if ser: ser.close() 
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":

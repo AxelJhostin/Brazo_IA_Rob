@@ -12,9 +12,9 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define CANAL_PITCH 10
 #define CANAL_ROLL 9
 #define CANAL_PULGAR 13
-#define CANAL_INDICE 6
+#define CANAL_INDICE 5
 #define CANAL_MEDIO 4
-#define CANAL_ANULAR 5
+#define CANAL_ANULAR 6
 #define CANAL_MENIQUE 7
 
 String inputString = "";

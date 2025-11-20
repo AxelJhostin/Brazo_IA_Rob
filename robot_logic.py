@@ -247,7 +247,7 @@ def _calcular_angulos_brazo(landmarks, h, w):
         # Ángulo con respecto al eje vertical (hacia abajo = [0, -1])
         dot_product = np.dot(vec_shoulder_elbow, [0, -1])
         cos_angle = np.clip(dot_product / mag_vec, -1.0, 1.0)
-        ang_hombro = 180 - np.degrees(np.arccos(cos_angle))
+        ang_hombro = np.degrees(np.arccos(cos_angle))
     
     # Calcular ángulo del codo (entre hombro-codo-muñeca)
     vec1 = [shoulder[0] - elbow[0], shoulder[1] - elbow[1]]

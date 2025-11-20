@@ -258,7 +258,7 @@ def _calcular_angulos_brazo(landmarks, h, w):
     if mag1 > 0 and mag2 > 0: 
         dot_product = np.dot(vec1, vec2)
         cos_angle = np.clip(dot_product / (mag1 * mag2), -1.0, 1.0)
-        ang_codo = np.degrees(np.arccos(cos_angle))
+        ang_codo = 180 - np.degrees(np.arccos(cos_angle))
     
     return ({'hombro': ang_hombro, 'codo': ang_codo}, elbow, wrist)
 

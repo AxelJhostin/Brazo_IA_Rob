@@ -291,7 +291,7 @@ def _calcular_angulos_dedos(hand_landmarks):
     try:
         angulo_indice = _calcular_angulo_3p(lm[5], lm[6], lm[8])
         dedos['indice'] = np.interp(angulo_indice, [INPUT_ANGLE_MIN, INPUT_ANGLE_MAX], 
-                                     [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+                                     [SERVO_ANGLE_MAX, SERVO_ANGLE_MIN])
     except Exception:
         dedos['indice'] = 90
 
@@ -307,7 +307,7 @@ def _calcular_angulos_dedos(hand_landmarks):
     try:
         angulo_anular = _calcular_angulo_3p(lm[13], lm[14], lm[16])
         dedos['anular'] = np.interp(angulo_anular, [INPUT_ANGLE_MIN, INPUT_ANGLE_MAX], 
-                                     [SERVO_ANGLE_MIN, SERVO_ANGLE_MAX])
+                                     [SERVO_ANGLE_MAX, SERVO_ANGLE_MIN])
     except Exception:
         dedos['anular'] = 90
 
